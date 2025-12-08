@@ -1,0 +1,52 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+    id "com.google.gms.google-services"
+}
+
+android {
+    namespace = "com.example.sig_app"
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = "com.example.sig_app"
+        minSdkVersion = flutter.minSdkVersion
+        targetSdk = 34
+
+
+        versionCode = 1
+        versionName = "1.0.0"
+
+        manifestPlaceholders += [
+                notificationIcon: "@mipmap/ic_launcher"
+        ]
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+        coreLibraryDesugaringEnabled true
+    }
+
+
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.debug
+        }
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"
+
+}
+
+flutter {
+    source = "../.."
+}

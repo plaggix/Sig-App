@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "940751296025",
+    "project_id": "sigbd-da7ad",
+    "storage_bucket": "sigbd-da7ad.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:940751296025:android:dfe8e738229404f1807c88",
+        "android_client_info": {
+          "package_name": "com.example.sig_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "940751296025-p3oivhcm6ac3kemjs5jbk4fhnirouj3m.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAUJNQ8RiV3yhXpfp35Zl_J_nNt--YTthg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "940751296025-p3oivhcm6ac3kemjs5jbk4fhnirouj3m.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
