@@ -467,11 +467,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
       case 4: // Tâches
         return ConsulterActivitePage();
       case 5: // Entreprises
-        return GererEntreprisesPage();
+        return GererEntreprisesTachesPage();
       case 6: // Permissions
         return GestionPermissionsPage();
       case 7: // Rapports
-        return CreationFicheControlePage();
+        return AdminRapportsPage();
       default:
         return _buildDefaultContent(index);
     }

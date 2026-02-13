@@ -9,6 +9,7 @@ import 'package:sig_app/rapport_admin.dart';
 import 'package:sig_app/rapport_controller.dart';
 import 'package:sig_app/taches_controleur.dart';
 
+import 'consulter_planning_page.dart';
 import 'consulter_entreprise.dart';
 import 'creer_planning_page.dart';
 import 'localisation_page.dart';
@@ -78,7 +79,7 @@ class _ControllerDashboardState extends State<ControllerDashboard> {
 
     if (_userPermissions['planning'] == true) {
       items.add(DashboardItem(
-        title: 'Planning (accordé)',
+        title: 'Planning (Autorisé)',
         icon: Icons.calendar_today_outlined,
         subtitle: 'Créer votre planning',
         moduleKey: 'planning',
@@ -87,7 +88,7 @@ class _ControllerDashboardState extends State<ControllerDashboard> {
 
     if (_userPermissions['entreprises_&_taches'] == true) {
       items.add(DashboardItem(
-        title: 'Entreprises & Tâches (accordé)',
+        title: 'Entreprises & Tâches (Autorisé)',
         icon: Icons.apartment_outlined,
         subtitle: 'Créer et consulter vos entreprises et tâches',
         moduleKey: 'entreprises_&_taches',
@@ -96,7 +97,7 @@ class _ControllerDashboardState extends State<ControllerDashboard> {
 
     if (_userPermissions['carte_interactive'] == true) {
       items.add(DashboardItem(
-        title: 'Carte interactive (accordé)',
+        title: 'Carte interactive (Autorisé)',
         icon: Icons.map_outlined,
         subtitle: 'Consulter les positions',
         moduleKey: 'carte_interactive',
@@ -105,7 +106,7 @@ class _ControllerDashboardState extends State<ControllerDashboard> {
 
     if (_userPermissions['rapports'] == true) {
       items.add(DashboardItem(
-        title: 'Rapports (accordé)',
+        title: 'Rapports (Autorisé)',
         icon: Icons.analytics_outlined,
         subtitle: 'Creer vos fiche de rapport de terrein',
         moduleKey: 'rapports_simple',
@@ -118,6 +119,14 @@ class _ControllerDashboardState extends State<ControllerDashboard> {
         icon: Icons.calendar_view_day_outlined,
         subtitle: 'Voir mes affectations',
         moduleKey: 'Planning_du_jour',
+      ));
+
+       // Toujours visible
+      items.add(DashboardItem(
+        title: 'Planning hebdomadaire',
+        icon: Icons.calendar_today_outlined,
+        subtitle: 'Voir le planning general',
+        moduleKey: 'Planning_hebdomadaire',
       ));
 
       // Toujours visible
@@ -726,10 +735,12 @@ class _ControllerDashboardState extends State<ControllerDashboard> {
     switch (moduleKey) {
       case 'Planning_du_jour': // Planning du jour
         return const TachesDuJourPage();
+      case 'Planning_hebdomadaire': // Planning general
+        return const ConsulterPlanning();
       case 'Mes_tâches': // Mes Tâches
         return const PlanningSemainePersonnel();
       case 'Rapports': // Rapports
-        return const ControllerFillFichePage();
+        return const RapportsPage();
       case 'Messages': // Messages
         return const MessagePage();
 
@@ -737,11 +748,11 @@ class _ControllerDashboardState extends State<ControllerDashboard> {
       case 'planning': // Planning (accordé)
         return const PlanningPage();
       case 'entreprises_&_taches': // Entreprises & taches (accordés)
-        return const GererEntreprisesPage();
+        return const GererEntreprisesTachesPage();
       case 'carte_interactive':// Carte interactive (accordé)
         return const LocalisationPage();
       case 'rapports_simple': // Rapports (accordé)
-        return const CreationFicheControlePage();
+        return const AdminRapportsPage();
       default:
         return Card(
           elevation: 2,

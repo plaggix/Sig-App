@@ -13,6 +13,7 @@ class PlanningSemainePersonnel extends StatefulWidget {
 class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final _currentUser = FirebaseAuth.instance.currentUser;
+
   List<Map<String, dynamic>> _plannings = [];
   bool _loading = true;
   bool _refreshing = false;
@@ -24,26 +25,22 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
   @override
   void initState() {
     super.initState();
-
     _animationController = AnimationController(
       vsync: this,
       duration: Duration(milliseconds: 800),
     );
-
     _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(
         parent: _animationController,
         curve: Curves.easeInOut,
       ),
     );
-
     _scaleAnimation = Tween<double>(begin: 0.95, end: 1).animate(
       CurvedAnimation(
         parent: _animationController,
         curve: Curves.fastOutSlowIn,
       ),
     );
-
     _loadPlannings();
   }
 
@@ -55,9 +52,7 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
 
   Future<void> _loadPlannings() async {
     if (_currentUser == null) return;
-
     setState(() => _refreshing = true);
-
     final userPlanningSnapshot = await _firestore
         .collection('user_plannings')
         .doc(_currentUser!.uid)
@@ -74,7 +69,6 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
     for (final doc in userPlanningSnapshot.docs) {
       final data = doc.data();
       final jours = data['jours'] as Map<String, dynamic>?;
-
       if (jours != null) {
         jours.forEach((jour, activities) {
           if (activities is List) {
@@ -84,14 +78,25 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
               // 🔹 Filtrer uniquement les activités de la semaine en cours
               if (date.isAfter(lundi.subtract(const Duration(days: 1))) &&
                   date.isBefore(samedi.add(const Duration(days: 1)))) {
+                // Sécurité : une tâche DOIT appartenir à un rapport
+                final rapportId = item['rapportId'];
+
+                if (rapportId == null || rapportId.toString().isEmpty) {
+                 // on ignore les anciennes tâches cassées
+                 continue;
+                }
+
                 allTasks.add({
                   'id': item['id'] ?? doc.id,
                   'tache': item['tache'] ?? item['activite'] ?? 'Tâche sans nom',
                   'entreprise': item['sousAgence'] ?? item['entreprise'] ?? 'Entreprise non précisée',
                   'date': Timestamp.fromDate(date),
-                  'statut': item['statut'] ?? (item['effectue'] == true ? 'terminee' : 'en_attente'),
+                  'statut': item['statut'] ?? (item['effectue'] == true ? 'terminee' : 'inachevee'),
                   'jour': jour,
                   'effectue': item['effectue'] ?? false,
+                  'rapportId': item['rapportId'],
+                  'entrepriseId': item['entrepriseId'] ?? '',
+                  'sousAgenceId': item['sousAgenceId'] ?? '',
                 });
               }
             }
@@ -101,13 +106,11 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
     }
 
     if (!mounted) return;
-
     setState(() {
       _plannings = allTasks;
       _loading = false;
       _refreshing = false;
     });
-
     _animationController.forward();
   }
 
@@ -126,33 +129,41 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
     return lundi.add(Duration(days: offset));
   }
 
-
-
   Future<void> _changerStatut(Map<String, dynamic> planning, String nouveauStatut) async {
+    final planningId = planning['id']; 
+    final rapportId = planning['rapportId'];
+
+    if (planningId == null || rapportId == null) {
+     ScaffoldMessenger.of(context).showSnackBar(
+       const SnackBar(content: Text('Tâche ou rapport introuvable')),
+      );
+     return;
+    }
     try {
-      final idChamp = planning['id']; // UUID du planning
       if (_currentUser == null) return;
 
       final bool estTerminee = nouveauStatut == 'terminee';
+      final String statutLisible =
+        estTerminee ? 'Terminée' : 'Inachevée';
+
 
       // 🔹 1. Mettre à jour la collection globale "plannings"
       final query = await _firestore
           .collection('plannings')
-          .where('id', isEqualTo: idChamp)
+          .where('id', isEqualTo: planningId)
           .limit(1)
           .get();
-
       if (query.docs.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Aucune tâche correspondante trouvée pour mise à jour.')),
         );
         return;
       }
-
       final docRef = query.docs.first.reference;
       await docRef.update({
-        'statut': nouveauStatut,
+        'statut': statutLisible,
         'effectue': estTerminee,
+        'validatedAt': Timestamp.now(), 
       });
 
       // 🔹 2. Synchroniser aussi dans la collection "user_plannings"
@@ -160,20 +171,19 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
           .collection('user_plannings')
           .doc(_currentUser!.uid)
           .collection('plannings')
-          .doc(idChamp);
+          .doc(planningId);
 
       final userDoc = await userPlanningRef.get();
       if (userDoc.exists) {
         final data = userDoc.data()!;
         final jours = data['jours'] as Map<String, dynamic>?;
-
         if (jours != null) {
           // Met à jour le statut de la tâche dans la bonne journée
           jours.forEach((jour, tasks) {
             if (tasks is List) {
               for (var i = 0; i < tasks.length; i++) {
                 final t = tasks[i];
-                if (t is Map<String, dynamic> && t['id'] == idChamp) {
+                if (t is Map<String, dynamic> && t['id'] == planningId) {
                   t['statut'] = nouveauStatut;
                   t['effectue'] = estTerminee;
                   tasks[i] = t;
@@ -181,7 +191,6 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
               }
             }
           });
-
           await userPlanningRef.update({'jours': jours});
         }
       }
@@ -190,14 +199,36 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
       setState(() {
         for (var i = 0; i < _plannings.length; i++) {
           final p = _plannings[i];
-          if (p['id'] == idChamp) {
+          if (p['id'] == planningId) {
             _plannings[i]['statut'] = nouveauStatut;
             _plannings[i]['effectue'] = estTerminee;
           }
         }
       });
 
-      // 🔹 4. Feedback utilisateur
+      // ===============================
+     // 🔹 4. CRÉER / AJOUTER UNE VALIDATION DANS LE RAPPORT
+     // ===============================
+
+      final rapportRef = await _getOrCreateRapport(
+        entrepriseId: planning['entrepriseId'],
+        entrepriseNom: planning['entreprise'],
+        sousAgenceId: planning['sousAgenceId'],
+        sousAgenceNom: planning['entreprise'],
+      );
+
+      await rapportRef.collection('validations').add({
+        'planningId': planningId,
+        'tacheNom': planning['tache'],
+        'statut': statutLisible,
+        'validatedByUid': _currentUser!.uid,
+        'validatedAt': FieldValue.serverTimestamp(),
+        'observation': null,
+        'solution': null,
+        'isComplete': false,
+      });
+
+      // 🔹 5. Feedback utilisateur
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -209,7 +240,6 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
-
     } catch (e) {
       debugPrint('Erreur changement statut: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -218,6 +248,34 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
     }
   }
 
+  
+  Future<DocumentReference> _getOrCreateRapport({
+    required String entrepriseId,
+    required String entrepriseNom,
+    required String sousAgenceId,
+    required String sousAgenceNom,
+  }) async {
+      final firestore = FirebaseFirestore.instance;
+
+      final query = await firestore
+      .collection('rapports')
+      .where('entrepriseId', isEqualTo: entrepriseId)
+      .where('sousAgenceId', isEqualTo: sousAgenceId)
+      .limit(1)
+      .get();
+
+      if (query.docs.isNotEmpty) {
+        return query.docs.first.reference;
+      }
+
+      return await firestore.collection('rapports').add({
+        'entrepriseId': entrepriseId,
+        'entrepriseNom': entrepriseNom,
+        'sousAgenceId': sousAgenceId,
+        'sousAgenceNom': sousAgenceNom,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
 
   @override
   Widget build(BuildContext context) {
@@ -244,12 +302,14 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Mon Planning',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  )),
+              const Text(
+                'Mon Planning',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
               const SizedBox(height: 4),
               Text(
                 '${formatter.format(debutSemaine)} - ${formatter.format(finSemaine)}',
@@ -274,34 +334,34 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
         actions: [
           _refreshing
               ? Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            ),
-          )
+                  padding: const EdgeInsets.all(8.0),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  ),
+                )
               : IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _loadPlannings,
-            tooltip: 'Actualiser le planning',
-          ),
+                  icon: const Icon(Icons.refresh, color: Colors.white),
+                  onPressed: _loadPlannings,
+                  tooltip: 'Actualiser le planning',
+                ),
         ],
       ),
       body: _loading
           ? _buildLoadingState()
           : LayoutBuilder(
-        builder: (context, constraints) {
-          if (isWideScreen) {
-            return _buildDesktopLayout(grouped, debutSemaine, finSemaine);
-          } else {
-            return _buildMobileLayout(grouped, debutSemaine, finSemaine);
-          }
-        },
-      ),
+              builder: (context, constraints) {
+                if (isWideScreen) {
+                  return _buildDesktopLayout(grouped, debutSemaine, finSemaine);
+                } else {
+                  return _buildMobileLayout(grouped, debutSemaine, finSemaine);
+                }
+              },
+            ),
     );
   }
 
@@ -329,9 +389,7 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
   }
 
   Widget _buildMobileLayout(
-      Map<String, List<Map<String, dynamic>>> grouped,
-      DateTime debutSemaine,
-      DateTime finSemaine) {
+      Map<String, List<Map<String, dynamic>>> grouped, DateTime debutSemaine, DateTime finSemaine) {
     return FadeTransition(
       opacity: _fadeAnimation,
       child: ScaleTransition(
@@ -339,34 +397,32 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
         child: _plannings.isEmpty
             ? _buildEmptyState()
             : RefreshIndicator(
-          onRefresh: _loadPlannings,
-          color: const Color(0xFF2E7D32),
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _buildWeekHeader(debutSemaine, finSemaine),
-              const SizedBox(height: 16),
-              ...grouped.entries.map((entry) {
-                final jour = entry.key;
-                final items = entry.value;
-                if (items.isEmpty) return const SizedBox();
-                return JourPlanningCard(
-                  jour: jour,
-                  items: items,
-                  onStatusChange: _changerStatut,
-                );
-              }).toList(),
-            ],
-          ),
-        ),
+                onRefresh: _loadPlannings,
+                color: const Color(0xFF2E7D32),
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _buildWeekHeader(debutSemaine, finSemaine),
+                    const SizedBox(height: 16),
+                    ...grouped.entries.map((entry) {
+                      final jour = entry.key;
+                      final items = entry.value;
+                      if (items.isEmpty) return const SizedBox();
+                      return JourPlanningCard(
+                        jour: jour,
+                        items: items,
+                        onStatusChange: _changerStatut,
+                      );
+                    }).toList(),
+                  ],
+                ),
+              ),
       ),
     );
   }
 
   Widget _buildDesktopLayout(
-      Map<String, List<Map<String, dynamic>>> grouped,
-      DateTime debutSemaine,
-      DateTime finSemaine) {
+      Map<String, List<Map<String, dynamic>>> grouped, DateTime debutSemaine, DateTime finSemaine) {
     return FadeTransition(
       opacity: _fadeAnimation,
       child: ScaleTransition(
@@ -374,44 +430,44 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
         child: _plannings.isEmpty
             ? _buildEmptyState()
             : RefreshIndicator(
-          onRefresh: _loadPlannings,
-          color: const Color(0xFF2E7D32),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Colonne gauche - Liste des jours
-                Expanded(
-                  flex: 1,
-                  child: Column(
+                onRefresh: _loadPlannings,
+                color: const Color(0xFF2E7D32),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildWeekHeader(debutSemaine, finSemaine),
-                      const SizedBox(height: 16),
-                      ...grouped.entries.map((entry) {
-                        final jour = entry.key;
-                        final items = entry.value;
-                        if (items.isEmpty) return const SizedBox();
-                        return JourPlanningCard(
-                          jour: jour,
-                          items: items,
-                          onStatusChange: _changerStatut,
-                          compact: true,
-                        );
-                      }).toList(),
+                      // Colonne gauche - Liste des jours
+                      Expanded(
+                        flex: 1,
+                        child: Column(
+                          children: [
+                            _buildWeekHeader(debutSemaine, finSemaine),
+                            const SizedBox(height: 16),
+                            ...grouped.entries.map((entry) {
+                              final jour = entry.key;
+                              final items = entry.value;
+                              if (items.isEmpty) return const SizedBox();
+                              return JourPlanningCard(
+                                jour: jour,
+                                items: items,
+                                onStatusChange: _changerStatut,
+                                compact: true,
+                              );
+                            }).toList(),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 24),
+                      // Colonne droite - Détails des tâches (premier jour développé)
+                      Expanded(
+                        flex: 2,
+                        child: _buildTasksDetailView(grouped),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 24),
-                // Colonne droite - Détails des tâches (premier jour développé)
-                Expanded(
-                  flex: 2,
-                  child: _buildTasksDetailView(grouped),
-                ),
-              ],
-            ),
-          ),
-        ),
+              ),
       ),
     );
   }
@@ -470,10 +526,9 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
 
   Widget _buildTasksDetailView(Map<String, List<Map<String, dynamic>>> grouped) {
     final firstNonEmptyDay = grouped.entries.firstWhere(
-          (entry) => entry.value.isNotEmpty,
+      (entry) => entry.value.isNotEmpty,
       orElse: () => grouped.entries.first,
     );
-
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -540,7 +595,6 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
             ),
           ),
           const SizedBox(height: 24),
-
         ],
       ),
     );
@@ -587,7 +641,6 @@ class _JourPlanningCardState extends State<JourPlanningCard> with SingleTickerPr
     final isToday = DateTime.now().day == date.day &&
         DateTime.now().month == date.month &&
         DateTime.now().year == date.year;
-
     if (isToday) {
       _isExpanded = true;
       _expandController.forward();
@@ -636,7 +689,6 @@ class _JourPlanningCardState extends State<JourPlanningCard> with SingleTickerPr
     final isToday = DateTime.now().day == date.day &&
         DateTime.now().month == date.month &&
         DateTime.now().year == date.year;
-
     final completedCount = getCompletedTasksCount();
     final totalCount = widget.items.length;
     final progress = totalCount > 0 ? completedCount / totalCount : 0;
@@ -670,13 +722,9 @@ class _JourPlanningCardState extends State<JourPlanningCard> with SingleTickerPr
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: isToday
-                            ? const Color(0xFF2E7D32).withOpacity(0.1)
-                            : Theme.of(context).colorScheme.surfaceVariant,
+                        color: isToday ? const Color(0xFF2E7D32).withOpacity(0.1) : Theme.of(context).colorScheme.surfaceVariant,
                         shape: BoxShape.circle,
-                        border: isToday
-                            ? Border.all(color: const Color(0xFF2E7D32), width: 2)
-                            : null,
+                        border: isToday ? Border.all(color: const Color(0xFF2E7D32), width: 2) : null,
                       ),
                       child: Center(
                         child: Text(
@@ -684,9 +732,7 @@ class _JourPlanningCardState extends State<JourPlanningCard> with SingleTickerPr
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: isToday
-                                ? const Color(0xFF2E7D32)
-                                : Theme.of(context).colorScheme.onSurface,
+                            color: isToday ? const Color(0xFF2E7D32) : Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
                       ),
@@ -701,21 +747,15 @@ class _JourPlanningCardState extends State<JourPlanningCard> with SingleTickerPr
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
-                              color: isToday
-                                  ? const Color(0xFF2E7D32)
-                                  : Theme.of(context).colorScheme.onSurface,
+                              color: isToday ? const Color(0xFF2E7D32) : Theme.of(context).colorScheme.onSurface,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            isToday
-                                ? 'Aujourd\'hui • ${DateFormat('EEEE', 'fr_FR').format(date)}'
-                                : DateFormat('EEEE', 'fr_FR').format(date),
+                            isToday ? 'Aujourd\'hui • ${DateFormat('EEEE', 'fr_FR').format(date)}' : DateFormat('EEEE', 'fr_FR').format(date),
                             style: TextStyle(
                               fontSize: 13,
-                              color: isToday
-                                  ? const Color(0xFF2E7D32).withOpacity(0.7)
-                                  : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                              color: isToday ? const Color(0xFF2E7D32).withOpacity(0.7) : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                             ),
                           ),
                           if (!widget.compact) ...[
@@ -737,9 +777,7 @@ class _JourPlanningCardState extends State<JourPlanningCard> with SingleTickerPr
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: isToday
-                                ? const Color(0xFF2E7D32).withOpacity(0.1)
-                                : Theme.of(context).colorScheme.surfaceVariant,
+                            color: isToday ? const Color(0xFF2E7D32).withOpacity(0.1) : Theme.of(context).colorScheme.surfaceVariant,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
@@ -747,9 +785,7 @@ class _JourPlanningCardState extends State<JourPlanningCard> with SingleTickerPr
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: isToday
-                                  ? const Color(0xFF2E7D32)
-                                  : Theme.of(context).colorScheme.onSurface,
+                              color: isToday ? const Color(0xFF2E7D32) : Theme.of(context).colorScheme.onSurface,
                             ),
                           ),
                         ),
@@ -763,7 +799,6 @@ class _JourPlanningCardState extends State<JourPlanningCard> with SingleTickerPr
                     ),
                   ],
                 ),
-
                 // Contenu développable
                 SizeTransition(
                   sizeFactor: _heightAnimation,
@@ -792,11 +827,7 @@ class TacheTile extends StatelessWidget {
   final Map<String, dynamic> planning;
   final Function(Map<String, dynamic>, String) onStatusChange;
 
-  const TacheTile({
-    super.key,
-    required this.planning,
-    required this.onStatusChange,
-  });
+  const TacheTile({super.key, required this.planning, required this.onStatusChange});
 
   Color _getStatusColor(String statut) {
     switch (statut) {
@@ -836,7 +867,7 @@ class TacheTile extends StatelessWidget {
       case 'terminee':
         return 'Terminée';
       case 'inachevee':
-        return 'En pause';
+        return 'En Cours';
       default:
         return 'En attente';
     }
@@ -845,7 +876,7 @@ class TacheTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dateTache = (planning['date'] as Timestamp).toDate();
-    final statut = planning['statut'] ?? 'en_attente';
+    final statut = planning['statut'] ?? 'inachevee';
     final statusColor = _getStatusColor(statut);
     final backgroundColor = _getStatusBackgroundColor(statut);
 

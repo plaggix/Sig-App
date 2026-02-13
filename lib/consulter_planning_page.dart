@@ -196,189 +196,16 @@ class _ConsulterPlanningState extends State<ConsulterPlanning> with TickerProvid
     );
   }
 
-  Widget _buildPlanningTaskCard(Map<String, dynamic> data) {
-    // === Récupération des données de base ===
-    final date = (data['date'] as Timestamp).toDate();
-    final dayName = _getDayName(date);
-
-    // Identifiant du contrôleur
-    final controleurId = data['controleurId'] ?? '';
-    final controleurName = _controleurNames[controleurId] ?? controleurId;
-
-    // === Lecture du statut ===
-    final dynamic effectueField = data['effectue'];
-    final String statutField = (data['statut'] ?? data['status'] ?? '').toString().toLowerCase();
-
-    bool isCompleted;
-    String status;
-
-    if (effectueField == true) {
-      isCompleted = true;
-      status = 'Effectué';
-    } else if (effectueField == false) {
-      isCompleted = false;
-      status = 'Inachevée';
-    } else if (statutField.contains('term')) {
-      isCompleted = true;
-      status = 'Effectué';
-    } else if (statutField.contains('inach')) {
-      isCompleted = false;
-      status = 'Inachevée';
-    } else {
-      isCompleted = false;
-      status = 'En cours';
-    }
-
-    final id = data['id'] as String;
-    final isSelected = _selectedPlannings.contains(id);
-
-    return AnimatedContainer(
-      duration: _animationDuration,
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: isSelected ? _colorScheme.errorContainer.withOpacity(0.1) : _colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isSelected ? _colorScheme.error : Colors.transparent,
-          width: 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            setState(() {
-              if (isSelected) {
-                _selectedPlannings.remove(id);
-              } else {
-                _selectedPlannings.add(id);
-              }
-            });
-          },
-          onLongPress: () {
-            setState(() {
-              if (isSelected) {
-                _selectedPlannings.remove(id);
-              } else {
-                _selectedPlannings.add(id);
-              }
-            });
-          },
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                AnimatedContainer(
-                  duration: _animationDuration,
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? _colorScheme.error
-                        : (isCompleted ? _colorScheme.primary : _colorScheme.secondaryContainer),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    isSelected ? Icons.check :
-                    (isCompleted ? Icons.check_circle_outline : Icons.access_time_outlined),
-                    color: isSelected ? _colorScheme.onError :
-                    (isCompleted ? _colorScheme.onPrimary : _colorScheme.onSecondaryContainer),
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        (data['tache'] ?? data['activite'] ?? 'Tâche inconnue').toString(),
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: _colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 4,
-                        children: [
-                          Chip(
-                            label: Text(
-                              '${data['sousAgence'] ?? data['entreprise'] ?? 'Entreprise non précisée'}',
-                              style: TextStyle(fontSize: 11, color: _colorScheme.onSurface),
-                            ),
-                            backgroundColor: _colorScheme.surfaceVariant,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          Chip(
-                            label: Text(
-                              controleurName,
-                              style: TextStyle(fontSize: 11, color: _colorScheme.onSurface),
-                            ),
-                            backgroundColor: _colorScheme.primaryContainer,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(Icons.calendar_today, size: 12, color: _colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$dayName ${DateFormat('dd/MM/yyyy').format(date)}',
-                            style: TextStyle(fontSize: 12, color: _colorScheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isCompleted ? _colorScheme.primaryContainer : _colorScheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    status,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: isCompleted ? _colorScheme.onPrimaryContainer : _colorScheme.onSecondaryContainer,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildProgressIndicator(int completed, int total) {
     final progress = total > 0 ? completed / total : 0.0;
 
     Color progressColor;
     if (progress == 0.0 && total > 0) {
-      progressColor = Colors.grey; // 🔸 rien fait
+      progressColor = Colors.grey; // rien fait
     } else if (progress == 1.0) {
-      progressColor = Colors.green; // ✅ tout terminé
+      progressColor = Colors.green; // tout terminé
     } else {
-      progressColor = Colors.orange; // 🟠 partiellement ou en retard
+      progressColor = Colors.orange; // partiellement ou en retard
     }
 
     return SizedBox(
@@ -406,6 +233,94 @@ class _ConsulterPlanningState extends State<ConsulterPlanning> with TickerProvid
     );
   }
 
+Widget _buildWeeklyTable(List<Map<String, dynamic>> plannings) {
+  // Tri par jour
+  final ordered = [...plannings];
+  ordered.sort((a, b) {
+    final da = (a['data']['date'] as Timestamp).toDate();
+    final db = (b['data']['date'] as Timestamp).toDate();
+    return da.compareTo(db);
+  });
+  
+  final horizontalController = ScrollController();
+
+  return SizedBox(
+    height: 320, // force un conteneur scrollable
+    child: Scrollbar(
+      thumbVisibility: true,
+      controller: horizontalController,
+      scrollbarOrientation: ScrollbarOrientation.bottom,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.vertical,
+          child: DataTable(
+            headingRowColor: MaterialStatePropertyAll(_colorScheme.primary),
+            headingTextStyle: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+            dataRowHeight: 64,
+            columns: const [
+              DataColumn(label: Text("Jour")),
+              DataColumn(label: Text("Date")),
+              DataColumn(label: Text("Tâche")),
+              DataColumn(label: Text("Entreprise")),
+              DataColumn(label: Text("Sous-agence")),
+              DataColumn(label: Text("Contrôleurs")),
+              DataColumn(label: Text("Statut")),
+            ],
+            rows: ordered.map((item) {
+              final data = item['data'];
+              final date = (data['date'] as Timestamp).toDate();
+
+              final List<dynamic> controleursIds =
+                  data['controleurs'] ??
+                  (data['controleurId'] != null ? [data['controleurId']] : []);
+
+              final controleurNames = controleursIds
+                  .map((id) => _controleurNames[id] ?? id.toString())
+                  .join(', ');
+
+              final effectue = data['effectue'] == true;
+              final status = effectue ? 'Effectué' : 'Inachevée';
+
+              return DataRow(
+                selected: _selectedPlannings.contains(item['id']),
+                onSelectChanged: (_) {
+                  setState(() {
+                    if (_selectedPlannings.contains(item['id'])) {
+                      _selectedPlannings.remove(item['id']);
+                    } else {
+                      _selectedPlannings.add(item['id']);
+                    }
+                  });
+                },
+                cells: [
+                  DataCell(Text(_getDayName(date))),
+                  DataCell(Text(DateFormat('dd/MM/yyyy').format(date))),
+                  DataCell(Text(data['tache'] ?? '--')),
+                  DataCell(Text(data['entreprise'] ?? '--')),
+                  DataCell(Text(data['sousAgence'] ?? '--')),
+                  DataCell(Text(controleurNames)),
+                  DataCell(
+                    Text(
+                      status,
+                      style: TextStyle(
+                        color: effectue ? Colors.green : Colors.orange,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    ),
+  );
+}
   Widget _buildWeeklyPlanningCard(String week, List<Map<String, dynamic>> plannings) {
     final weekStart = DateTime.parse(week);
     final weekEnd = weekStart.add(const Duration(days: 6));
@@ -438,15 +353,15 @@ class _ConsulterPlanningState extends State<ConsulterPlanning> with TickerProvid
           initiallyExpanded: false,
           tilePadding: const EdgeInsets.all(20),
           childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          leading: Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: _colorScheme.primary.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.calendar_month, color: _colorScheme.primary, size: 24),
+          leading: SizedBox(
+           width: 50,
+           height: 50,
+           child: CircleAvatar(
+           backgroundColor: _colorScheme.primary.withOpacity(0.1),
+           child: Icon(Icons.calendar_month, color: _colorScheme.primary, size: 24),
           ),
+        ),
+
           title: Text(
             'Semaine du ${DateFormat('dd/MM/yyyy').format(weekStart)}',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: _colorScheme.onSurface),
@@ -478,7 +393,7 @@ class _ConsulterPlanningState extends State<ConsulterPlanning> with TickerProvid
           ),
           trailing: _buildProgressIndicator(completedCount, totalCount),
           children: [
-            ...plannings.map((e) => _buildPlanningTaskCard({...e['data'], 'id': e['id']})),
+            _buildWeeklyTable(plannings),
           ],
         ),
       ),

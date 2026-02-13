@@ -1,233 +1,83 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:iconsax/iconsax.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:iconsax/iconsax.dart';
 
-class GererEntreprisesPage extends StatefulWidget {
-  const GererEntreprisesPage({super.key});
+class GererEntreprisesTachesPage extends StatefulWidget {
+  const GererEntreprisesTachesPage({super.key});
 
   @override
-  State<GererEntreprisesPage> createState() => _GererEntreprisesPageState();
+  State<GererEntreprisesTachesPage> createState() => _GererEntreprisesTachesPageState();
 }
 
-class _GererEntreprisesPageState extends State<GererEntreprisesPage> {
+class _GererEntreprisesTachesPageState extends State<GererEntreprisesTachesPage> with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final _auth = FirebaseAuth.instance;
 
-  final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nomController = TextEditingController();
-  final TextEditingController _directeurController = TextEditingController();
-  final TextEditingController _sousAgenceNomController = TextEditingController();
-  final TextEditingController _sousAgenceVilleController = TextEditingController();
-  final TextEditingController _tacheTitreController = TextEditingController();
-  final TextEditingController _tacheDescController = TextEditingController();
+  // Controllers général
   final TextEditingController _searchController = TextEditingController();
 
-  List<DocumentSnapshot> _filteredEntreprises = [];
-  List<DocumentSnapshot> _allEntreprises = [];
+  // Form controllers (entreprise)
+  final _formKeyEntreprise = GlobalKey<FormState>();
+  final TextEditingController _nomEntrepriseController = TextEditingController();
+  final TextEditingController _directeurEntrepriseController = TextEditingController();
+
+  // Form controllers (sous-agence)
+  final TextEditingController _nomSousAgenceController = TextEditingController();
+  final TextEditingController _villeSousAgenceController = TextEditingController();
+
+  // Form controllers (tâche globale)
+  final TextEditingController _titreTacheController = TextEditingController();
+  final TextEditingController _descTacheController = TextEditingController();
+
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(_onSearchChanged);
-  }
-
-  void _onSearchChanged() {
-    final query = _searchController.text.toLowerCase();
-    if (query.isEmpty) {
-      setState(() {
-        _filteredEntreprises = _allEntreprises;
-      });
-    } else {
-      setState(() {
-        _filteredEntreprises = _allEntreprises.where((entreprise) {
-          final data = entreprise.data() as Map<String, dynamic>;
-          final nom = data['nom']?.toString().toLowerCase() ?? '';
-          final directeur = data['directeur']?.toString().toLowerCase() ?? '';
-          return nom.contains(query) || directeur.contains(query);
-        }).toList();
-      });
-    }
+    _tabController = TabController(length: 2, vsync: this);
   }
 
   @override
   void dispose() {
-    _nomController.dispose();
-    _directeurController.dispose();
-    _sousAgenceNomController.dispose();
-    _sousAgenceVilleController.dispose();
-    _tacheTitreController.dispose();
-    _tacheDescController.dispose();
     _searchController.dispose();
+    _nomEntrepriseController.dispose();
+    _directeurEntrepriseController.dispose();
+    _nomSousAgenceController.dispose();
+    _villeSousAgenceController.dispose();
+    _titreTacheController.dispose();
+    _descTacheController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
-  // ---------------- ENTREPRISES ----------------
-  Future<void> _ajouterEntreprise() async {
-    if (_formKey.currentState!.validate()) {
-      try {
-        await _firestore.collection('entreprises').add({
-          'nom': _nomController.text.trim(),
-          'directeur': _directeurController.text.trim(),
-          'dateCreation': Timestamp.now(),
-        });
-
-        Navigator.pop(context);
-        _nomController.clear();
-        _directeurController.clear();
-
-        _showSnack('Entreprise ajoutée avec succès !', success: true);
-      } catch (e) {
-        _showSnack('Erreur : ${e.toString()}', success: false);
-      }
-    }
-  }
-
-  void _modifierEntreprise(String entrepriseId, String nom, String directeur) {
-    _nomController.text = nom;
-    _directeurController.text = directeur;
-
-    _ouvrirFormulaireAjout(isEdition: true, entrepriseId: entrepriseId);
-  }
-
-  Future<void> _supprimerEntreprise(String entrepriseId) async {
-    try {
-      await _firestore.collection('entreprises').doc(entrepriseId).delete();
-      _showSnack('Entreprise supprimée !', success: true);
-    } catch (e) {
-      _showSnack('Erreur : ${e.toString()}', success: false);
-    }
-  }
-
-  // ---------------- SOUS-AGENCES ----------------
-  Future<void> _ajouterSousAgence(String entrepriseId) async {
-    if (_sousAgenceNomController.text.trim().isEmpty) return;
-    try {
-      await _firestore
-          .collection('entreprises')
-          .doc(entrepriseId)
-          .collection('sousAgences')
-          .add({
-        'nom': _sousAgenceNomController.text.trim(),
-        'ville': _sousAgenceVilleController.text.trim(),
-        'dateCreation': Timestamp.now(),
-      });
-      Navigator.pop(context);
-      _sousAgenceNomController.clear();
-      _sousAgenceVilleController.clear();
-      _showSnack('Sous-agence ajoutée avec succès !', success: true);
-    } catch (e) {
-      _showSnack('Erreur : ${e.toString()}', success: false);
-    }
-  }
-
-  void _modifierSousAgence(String entrepriseId, String sousAgenceId, String nom, String ville) {
-    _sousAgenceNomController.text = nom;
-    _sousAgenceVilleController.text = ville;
-
-    _ouvrirFormulaireAjoutSousAgence(
-      entrepriseId,
-      isEdition: true,
-      sousAgenceId: sousAgenceId,
-    );
-  }
-
-  Future<void> _supprimerSousAgence(String entrepriseId, String sousAgenceId) async {
-    try {
-      await _firestore
-          .collection('entreprises')
-          .doc(entrepriseId)
-          .collection('sousAgences')
-          .doc(sousAgenceId)
-          .delete();
-      _showSnack('Sous-agence supprimée !', success: true);
-    } catch (e) {
-      _showSnack('Erreur : ${e.toString()}', success: false);
-    }
-  }
-
-  // ---------------- TACHES ----------------
-  Future<void> _ajouterTache(String entrepriseId) async {
-    if (_tacheTitreController.text.trim().isEmpty) return;
-    try {
-      await _firestore
-          .collection('entreprises')
-          .doc(entrepriseId)
-          .collection('taches')
-          .add({
-        'titre': _tacheTitreController.text.trim(),
-        'description': _tacheDescController.text.trim(),
-        'dateCreation': Timestamp.now(),
-      });
-      Navigator.pop(context);
-      _tacheTitreController.clear();
-      _tacheDescController.clear();
-      _showSnack('Tâche ajoutée avec succès !', success: true);
-    } catch (e) {
-      _showSnack('Erreur : ${e.toString()}', success: false);
-    }
-  }
-
-  void _modifierTache(String entrepriseId, String tacheId, String titre, String desc) {
-    _tacheTitreController.text = titre;
-    _tacheDescController.text = desc;
-    _ouvrirFormulaireTache(entrepriseId, isEdition: true, tacheId: tacheId);
-  }
-
-  Future<void> _supprimerTache(String entrepriseId, String tacheId) async {
-    try {
-      await _firestore
-          .collection('entreprises')
-          .doc(entrepriseId)
-          .collection('taches')
-          .doc(tacheId)
-          .delete();
-      _showSnack('Tâche supprimée !', success: true);
-    } catch (e) {
-      _showSnack('Erreur : ${e.toString()}', success: false);
-    }
-  }
-
-  // ---------------- UI HELPERS ----------------
-  void _showSnack(String msg, {required bool success}) {
+  // -------------------- Helper UI --------------------
+  void _showSnack(String message, {bool success = true}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              success ? Icons.check_circle : Icons.error,
-              color: Colors.white,
-              size: 20,
-            ),
-            const SizedBox(width: 8),
-            Expanded(child: Text(msg)),
-          ],
-        ),
+        content: Row(children: [
+          Icon(success ? Icons.check_circle : Icons.error, color: Colors.white),
+          const SizedBox(width: 8),
+          Expanded(child: Text(message)),
+        ]),
         backgroundColor: success ? const Color(0xFF2E7D32) : Colors.red[700],
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
       ),
     );
   }
 
-  void _showDeleteConfirm(VoidCallback onConfirm, {String title = 'Confirmer', String content = 'Cette action est irréversible.'}) {
-    showDialog(
+  Future<bool?> _confirmDialog({required String title, required String content}) {
+    return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(title),
         content: Text(content),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              Navigator.pop(ctx);
-              onConfirm();
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Supprimer'),
           ),
         ],
@@ -235,632 +85,872 @@ class _GererEntreprisesPageState extends State<GererEntreprisesPage> {
     );
   }
 
-  void _ouvrirFormulaireAjout({bool isEdition = false, String? entrepriseId}) {
-    final isLargeScreen = MediaQuery.of(context).size.width > 600;
+  // -------------------- Firestore helpers --------------------
 
-    if (isLargeScreen) {
-      showDialog(
-        context: context,
-        builder: (context) => Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          child: _buildFormAjoutEntreprise(isEdition, entrepriseId),
-        ),
-      );
-    } else {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (context) => _buildFormAjoutEntreprise(isEdition, entrepriseId),
-      );
+  // Crée une tâche globale et retourne son id
+  Future<String?> _createGlobalTache({required String titre, String? description}) async {
+    try {
+      final docRef = await _firestore.collection('taches').add({
+        'titre': titre.trim(),
+        'description': description?.trim() ?? '',
+        'dateCreation': Timestamp.now(),
+      });
+      return docRef.id;
+    } catch (e) {
+      _showSnack('Erreur création tâche : ${e.toString()}', success: false);
+      return null;
     }
   }
 
-  Widget _buildFormAjoutEntreprise(bool isEdition, String? entrepriseId) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-        left: 24,
-        right: 24,
-        top: 24,
-      ),
-      child: Form(
-        key: _formKey,
-        child: Column(
+  // Supprime une tâche globale et la retire de toutes les entreprises et sous-agences
+  Future<void> _deleteGlobalTache(String tacheId) async {
+    final confirm = await _confirmDialog(title: 'Supprimer la tâche', content: 'Cette suppression supprimera la tâche globalement (pour toutes les entreprises).');
+    if (confirm != true) return;
+    try {
+      // Supprimer la tâche globale
+      await _firestore.collection('taches').doc(tacheId).delete();
+
+      // Retirer des entreprises (update in batches)
+      final entreprises = await _firestore.collection('entreprises').get();
+      final batch = _firestore.batch();
+      for (final e in entreprises.docs) {
+        final ref = e.reference;
+        batch.update(ref, {'taches': FieldValue.arrayRemove([tacheId])});
+        // Retirer des sous-agences
+        final sousAgencesSnap = await ref.collection('sousAgences').get();
+        for (final s in sousAgencesSnap.docs) {
+          batch.update(s.reference, {'taches': FieldValue.arrayRemove([tacheId])});
+        }
+      }
+      await batch.commit();
+      _showSnack('Tâche supprimée globalement.', success: true);
+    } catch (e) {
+      _showSnack('Erreur suppression tâche: ${e.toString()}', success: false);
+    }
+  }
+
+  // Crée une entreprise avec la liste de taches sélectionnées (liste d'IDs).
+  Future<void> _createEntreprise({required String nom, required String directeur, required List<String> tachesIds}) async {
+    try {
+      final docRef = await _firestore.collection('entreprises').add({
+        'nom': nom.trim(),
+        'directeur': directeur.trim(),
+        'dateCreation': Timestamp.now(),
+        'taches': tachesIds,
+        'isActive': true,
+      });
+
+      // Créer automatiquement la collection sousAgences vide ; mais si tu veux initialiser, on peut
+      // Hériter taches dans les sous-agences (si on crée des sous-agences plus tard on les initialisera)
+      // On met à jour les sous-agences existantes (s'il y en a) pour refléter les taches par défaut
+      await _syncTachesToSousAgences(docRef.id, tachesIds);
+
+      _showSnack('Entreprise crée avec succès !', success: true);
+    } catch (e) {
+      _showSnack('Erreur création entreprise : ${e.toString()}', success: false);
+    }
+  }
+
+  // Modifier entreprise (nom/directeur + éventuellement update de taches)
+  Future<void> _updateEntreprise({required String entrepriseId, required String nom, required String directeur, List<String>? taches}) async {
+    try {
+      final data = {'nom': nom.trim(), 'directeur': directeur.trim()};
+      if (taches != null) {
+      await FirebaseFirestore.instance
+      .collection('entreprises')
+      .doc(entrepriseId)
+      .update({'taches': taches});
+}
+
+      await _firestore.collection('entreprises').doc(entrepriseId).update(data);
+
+      if (taches != null) {
+        // Propager aux sous-agences pour que l'appartenance soit la même
+        await _syncTachesToSousAgences(entrepriseId, taches);
+      }
+
+      _showSnack('Entreprise modifiée !', success: true);
+    } catch (e) {
+      _showSnack('Erreur modification : ${e.toString()}', success: false);
+    }
+  }
+
+  // Supprimer entreprise (et toutes ses sous-agences)
+  Future<void> _deleteEntreprise(String entrepriseId) async {
+    final confirm = await _confirmDialog(title: 'Supprimer l\'entreprise', content: 'Voulez-vous vraiment supprimer cette entreprise et toutes ses sous-agences ?');
+    if (confirm != true) return;
+    try {
+      final entrepriseRef = _firestore.collection('entreprises').doc(entrepriseId);
+
+      // Supprime sous-agences
+      final sousAgencesSnap = await entrepriseRef.collection('sousAgences').get();
+      final batch = _firestore.batch();
+      for (final s in sousAgencesSnap.docs) batch.delete(s.reference);
+
+      // Supprime entreprise
+      batch.delete(entrepriseRef);
+      await batch.commit();
+
+      _showSnack('Entreprise supprimée.', success: true);
+    } catch (e) {
+      _showSnack('Erreur suppression entreprise: ${e.toString()}', success: false);
+    }
+  }
+
+  Future<void> _createMissingRapportsForExistingSousAgences() async {
+  final user = _auth.currentUser;
+  if (user == null) return;
+
+  final entreprisesSnap = await _firestore.collection('entreprises').get();
+
+  for (final e in entreprisesSnap.docs) {
+    final entrepriseId = e.id;
+    final entrepriseNom = e['nom'] ?? '';
+
+    final sousSnap = await e.reference.collection('sousAgences').get();
+
+    for (final s in sousSnap.docs) {
+      final sousAgenceId = s.id;
+      final sousAgenceNom = s['nom'] ?? '';
+
+      final existingRapport = await _firestore
+          .collection('rapports')
+          .where('sousAgenceId', isEqualTo: sousAgenceId)
+          .limit(1)
+          .get();
+
+      if (existingRapport.docs.isEmpty) {
+        await _firestore.collection('rapports').add({
+          'ownerUid': user.uid,
+          'entrepriseId': entrepriseId,
+          'entrepriseNom': entrepriseNom,
+          'sousAgenceId': sousAgenceId,
+          'sousAgenceNom': sousAgenceNom,
+          'createdAt': Timestamp.now(),
+          'statut': 'en_cours',
+        });
+      }
+    }
+  }
+}
+
+  // Ajouter sous-agence (hérite des tâches actuelles de l'entreprise)
+Future<void> _createSousAgence(
+  String entrepriseId, {
+  required String nom,
+  String? ville,
+}) async {
+  try {
+    final entrepriseDoc =
+        await _firestore.collection('entreprises').doc(entrepriseId).get();
+
+    final taches = List<String>.from(entrepriseDoc.data()?['taches'] ?? []);
+
+    final sousAgenceRef = await _firestore
+        .collection('entreprises')
+        .doc(entrepriseId)
+        .collection('sousAgences')
+        .add({
+      'nom': nom.trim(),
+      'ville': ville?.trim() ?? '',
+      'dateCreation': Timestamp.now(),
+      'taches': taches,
+      'isActive': true,
+    });
+
+    // 🔥 création automatique du rapport
+    await _createRapportForSousAgence(
+      entrepriseId: entrepriseId,
+      entrepriseNom: entrepriseDoc['nom'] ?? '',
+      sousAgenceId: sousAgenceRef.id,
+      sousAgenceNom: nom.trim(),
+    );
+
+    _showSnack('Sous-agence ajoutée.', success: true);
+  } catch (e) {
+    _showSnack('Erreur ajout sous-agence: ${e.toString()}', success: false);
+  }
+}
+
+Future<void> _toggleEntrepriseActive(
+  String entrepriseId,
+  bool newValue,
+) async {
+  try {
+    final entrepriseRef =
+        _firestore.collection('entreprises').doc(entrepriseId);
+
+    final sousAgencesSnap =
+        await entrepriseRef.collection('sousAgences').get();
+
+    final batch = _firestore.batch();
+
+    // entreprise
+    batch.update(entrepriseRef, {'isActive': newValue});
+
+    // sous-agences
+    for (final s in sousAgencesSnap.docs) {
+      batch.update(s.reference, {'isActive': newValue});
+    }
+
+    await batch.commit();
+
+    _showSnack(
+      newValue
+          ? 'Entreprise activée'
+          : 'Entreprise désactivée',
+      success: true,
+    );
+  } catch (e) {
+    _showSnack(
+      'Erreur changement état : ${e.toString()}',
+      success: false,
+    );
+  }
+}
+
+
+  Future<void> _createRapportForSousAgence({
+  required String entrepriseId,
+  required String entrepriseNom,
+  required String sousAgenceId,
+  required String sousAgenceNom,
+}) async {
+  final user = _auth.currentUser;
+  if (user == null) return;
+
+  final rapportRef = await _firestore.collection('rapports').add({
+  'entrepriseId': entrepriseId,
+  'entrepriseNom': entrepriseNom,
+  'sousAgenceId': sousAgenceId,
+  'sousAgenceNom': sousAgenceNom,
+  'createdAt': Timestamp.now(),
+  'statut': 'en_cours',
+  'validations': {},
+  'observations': {},
+});
+
+// ID DU RAPPORT
+final rapportId = rapportRef.id;
+
+}
+
+  // Edit sous-agence
+  Future<void> _updateSousAgence(String entrepriseId, String sousAgenceId, {required String nom, String? ville}) async {
+    try {
+      await _firestore.collection('entreprises').doc(entrepriseId).collection('sousAgences').doc(sousAgenceId).update({
+        'nom': nom.trim(),
+        'ville': ville?.trim() ?? '',
+      });
+      _showSnack('Sous-agence modifiée.', success: true);
+    } catch (e) {
+      _showSnack('Erreur modification sous-agence: ${e.toString()}', success: false);
+    }
+  }
+
+  // Supprimer sous-agence
+  Future<void> _deleteSousAgence(String entrepriseId, String sousAgenceId) async {
+    final confirm = await _confirmDialog(title: 'Supprimer la sous-agence', content: 'Voulez-vous vraiment supprimer cette sous-agence ?');
+    if (confirm != true) return;
+    try {
+      await _firestore.collection('entreprises').doc(entrepriseId).collection('sousAgences').doc(sousAgenceId).delete();
+      _showSnack('Sous-agence supprimée.', success: true);
+    } catch (e) {
+      _showSnack('Erreur suppression sous-agence: ${e.toString()}', success: false);
+    }
+  }
+
+  // Supprimer une tâche pour une entreprise (local remove only)
+  Future<void> _removeTacheFromEntreprise(String entrepriseId, String tacheId) async {
+    try {
+      final entrepriseRef = _firestore.collection('entreprises').doc(entrepriseId);
+      await entrepriseRef.update({'taches': FieldValue.arrayRemove([tacheId])});
+      // Retirer aussi des sous-agences
+      final sousAgencesSnap = await entrepriseRef.collection('sousAgences').get();
+      final batch = _firestore.batch();
+      for (final s in sousAgencesSnap.docs) {
+        batch.update(s.reference, {'taches': FieldValue.arrayRemove([tacheId])});
+      }
+      await batch.commit();
+      _showSnack('Tâche retirée de l\'entreprise (local).', success: true);
+    } catch (e) {
+      _showSnack('Erreur suppression locale tâche: ${e.toString()}', success: false);
+    }
+  }
+
+  // Ajoute une tâche (id) à une entreprise (et aux sous-agences)
+  Future<void> _addTacheToEntreprise(String entrepriseId, String tacheId) async {
+    try {
+      final entrepriseRef = _firestore.collection('entreprises').doc(entrepriseId);
+      await entrepriseRef.update({'taches': FieldValue.arrayUnion([tacheId])});
+      await _syncTachesToSousAgencesFromEntrepriseRef(entrepriseRef);
+      _showSnack('Tâche ajoutée à l\'entreprise.', success: true);
+    } catch (e) {
+      _showSnack('Erreur ajout tâche à l\'entreprise: ${e.toString()}', success: false);
+    }
+  }
+
+  // Sync helper : écrase les taches des sous-agences pour correspondre à la liste fournie
+  Future<void> _syncTachesToSousAgences(String entrepriseId, List<String> taches) async {
+    try {
+      final sousAgencesSnap = await _firestore.collection('entreprises').doc(entrepriseId).collection('sousAgences').get();
+      final batch = _firestore.batch();
+      for (final s in sousAgencesSnap.docs) {
+        batch.update(s.reference, {'taches': taches});
+      }
+      await batch.commit();
+    } catch (e) {
+      // ignore ou log
+    }
+  }
+
+  // Variante si on a déjà le ref
+  Future<void> _syncTachesToSousAgencesFromEntrepriseRef(DocumentReference entrepriseRef) async {
+    try {
+      final entrepriseDoc = await entrepriseRef.get();
+      final data = entrepriseDoc.data() as Map<String, dynamic>;
+      final taches = List<String>.from(data['taches'] ?? []);
+      final sousAgencesSnap = await entrepriseRef.collection('sousAgences').get();
+      final batch = _firestore.batch();
+      for (final s in sousAgencesSnap.docs) {
+        batch.update(s.reference, {'taches': taches});
+      }
+      await batch.commit();
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // -------------------- UI - DIALOGS --------------------
+
+  // Dialog : créer/éditer tâche globale
+  Future<void> _openCreateEditTacheDialog({String? tacheId, String initialTitre = '', String initialDesc = ''}) async {
+    _titreTacheController.text = initialTitre;
+    _descTacheController.text = initialDesc;
+
+    final isEdit = tacheId != null;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEdit ? 'Modifier tâche' : 'Nouvelle tâche'),
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  isEdition ? 'Modifier entreprise' : 'Ajouter entreprise',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF2E7D32),
+            TextField(controller: _titreTacheController, decoration: const InputDecoration(labelText: 'Titre *')),
+            const SizedBox(height: 8),
+            TextField(controller: _descTacheController, decoration: const InputDecoration(labelText: 'Description'), maxLines: 3),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
+          ElevatedButton(
+            onPressed: () async {
+              final titre = _titreTacheController.text.trim();
+              if (titre.isEmpty) {
+                _showSnack('Titre requis.', success: false);
+                return;
+              }
+              if (isEdit) {
+                await _firestore.collection('taches').doc(tacheId).update({
+                  'titre': titre,
+                  'description': _descTacheController.text.trim(),
+                });
+                Navigator.pop(ctx, true);
+                _showSnack('Tâche modifiée.', success: true);
+              } else {
+                await _createGlobalTache(titre: titre, description: _descTacheController.text.trim());
+                Navigator.pop(ctx, true);
+              }
+            },
+            child: Text(isEdit ? 'MODIFIER' : 'ENREGISTRER'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      _titreTacheController.clear();
+      _descTacheController.clear();
+    }
+  }
+
+  // Dialog : création/édition d'entreprise (avec checklist des taches)
+  // Si entrepriseId != null => édition (récupérer ses taches)
+  Future<void> _openCreateEditEntrepriseDialog({String? entrepriseId, String? initialNom, String? initialDirecteur}) async {
+    final isEdit = entrepriseId != null;
+    _nomEntrepriseController.text = initialNom ?? '';
+    _directeurEntrepriseController.text = initialDirecteur ?? '';
+
+    // Load global tasks
+    final tasksSnap = await _firestore
+    .collection('taches')
+    .orderBy('dateCreation', descending: true)
+    .get();
+
+    // tasks est mutable (sans 'final')
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> tasks = tasksSnap.docs;
+
+
+    // For editing: get entreprise's current taches set
+    final Set<String> selectedIds = {};
+    if (isEdit) {
+      final eDoc = await _firestore.collection('entreprises').doc(entrepriseId).get();
+      final list = List<String>.from(eDoc.data()?['taches'] ?? []);
+      selectedIds.addAll(list);
+    } else {
+      // création par défaut : toutes cochées
+      for (var d in tasks) selectedIds.add(d.id);
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: Text(isEdit ? 'Modifier entreprise' : 'Nouvelle entreprise'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Form(
+                        key: _formKeyEntreprise,
+                        child: Column(
+                          children: [
+                            TextFormField(
+                              controller: _nomEntrepriseController,
+                              decoration: const InputDecoration(labelText: 'Nom *'),
+                              validator: (v) => v == null || v.isEmpty ? 'Champ requis' : null,
+                            ),
+                            const SizedBox(height: 8),
+                            TextFormField(
+                              controller: _directeurEntrepriseController,
+                              decoration: const InputDecoration(labelText: 'Dirigeant *'),
+                              validator: (v) => v == null || v.isEmpty ? 'Champ requis' : null,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Tâches disponibles', style: TextStyle(fontWeight: FontWeight.w600)),
+                          TextButton.icon(
+                            onPressed: () async {
+                              // Créer une nouvelle tâche directement depuis le formulaire
+                              final created = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx2) => AlertDialog(
+                                  title: const Text('Créer tâche'),
+                                  content: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      TextField(controller: _titreTacheController, decoration: const InputDecoration(labelText: 'Titre *')),
+                                      const SizedBox(height: 8),
+                                      TextField(controller: _descTacheController, decoration: const InputDecoration(labelText: 'Description'), maxLines: 3),
+                                    ],
+                                  ),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(ctx2, false), child: const Text('Annuler')),
+                                    ElevatedButton(
+                                      onPressed: () async {
+                                        final titre = _titreTacheController.text.trim();
+                                        if (titre.isEmpty) {
+                                          // ignore
+                                          return;
+                                        }
+                                        final newId = await _createGlobalTache(titre: titre, description: _descTacheController.text.trim());
+                                        if (newId != null) {
+                                          // 2) Récupère la liste à jour DES TÂCHES depuis Firestore (await *avant* setStateDialog)
+                                         final updatedSnap = await FirebaseFirestore.instance
+                                          .collection('taches')
+                                          .orderBy('dateCreation', descending: true)
+                                          .get(); // QuerySnapshot<Map<String,dynamic>>
+
+                                         // 3) Puis mets à jour l'UI dans la closure setStateDialog (synchrone)
+                                         setStateDialog(() {
+                                         // Remplace la liste locale 'tasks' par la liste à jour :
+                                          tasks = updatedSnap.docs
+                                            .cast<QueryDocumentSnapshot<Map<String, dynamic>>>();
+                                           // Coche automatiquement la nouvelle tâche
+                                           selectedIds.add(newId);
+  });
+                                          _titreTacheController.clear();
+                                          _descTacheController.clear();
+                                        }
+                                        Navigator.pop(ctx2, true);
+                                      },
+                                      child: const Text('Créer'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              // pour montrer la tâche fraîchement créée, on rafraîchit la liste locale
+                              if (created == true) {
+                                // reload tasks list
+                                final updated = await _firestore.collection('taches').orderBy('dateCreation', descending: true).get();
+                                // remplacer content (setStateDialog)
+                                setStateDialog(() {
+                                  // remplacer tasks list
+                                  // ignore: unnecessary_statements
+                                  // tasks variable non mutable en closure, workaround: use parent variable via a local copy
+                                });
+                                // pour simplicité : on ne recrée pas la variable tasks (ceci est un détail UI mineur),
+                                // mais la nouvelle tâche a bien été créée et cochée dans selectedIds.
+                              }
+                            },
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text('Nouvelle tâche'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      // Checklist - on affiche la liste des tâches globales
+                      if (tasks.isEmpty)
+                        const Text('Aucune tâche globale disponible.')
+                      else
+                        Column(
+                          children: tasks.map((d) {
+                            final titre = (d.data() as Map<String, dynamic>)['titre'] ?? '';
+                            final id = d.id;
+                            return CheckboxListTile(
+                              value: selectedIds.contains(id),
+                              title: Text(titre),
+                              controlAffinity: ListTileControlAffinity.leading,
+                              onChanged: (v) => setStateDialog(() {
+                                if (v == true) {
+                                  selectedIds.add(id);
+                                } else {
+                                  selectedIds.remove(id);
+                                }
+                              }),
+                            );
+                          }).toList(),
+                        ),
+                    ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (!_formKeyEntreprise.currentState!.validate()) return;
+                    final nom = _nomEntrepriseController.text.trim();
+                    final directeur = _directeurEntrepriseController.text.trim();
+                    final selectedList = selectedIds.toList();
+                    if (isEdit) {
+                      await _updateEntreprise(entrepriseId: entrepriseId!, nom: nom, directeur: directeur, taches: selectedList);
+                    } else {
+                      await _createEntreprise(nom: nom, directeur: directeur, tachesIds: selectedList);
+                    }
+                    Navigator.pop(ctx);
+                  },
+                  child: Text(isEdit ? 'MODIFIER' : 'ENREGISTRER'),
                 ),
               ],
-            ),
-            const SizedBox(height: 20),
-            TextFormField(
-              controller: _nomController,
-              decoration: InputDecoration(
-                labelText: 'Nom de l\'entreprise *',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              validator: (v) => v == null || v.isEmpty ? 'Champ requis' : null,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _directeurController,
-              decoration: InputDecoration(
-                labelText: 'Nom du dirigeant *',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              validator: (v) => v == null || v.isEmpty ? 'Champ requis' : null,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () async {
-                if (_formKey.currentState!.validate()) {
-                  if (isEdition && entrepriseId != null) {
-                    await _firestore.collection('entreprises').doc(entrepriseId).update({
-                      'nom': _nomController.text.trim(),
-                      'directeur': _directeurController.text.trim(),
-                    });
-                    Navigator.pop(context);
-                    _nomController.clear();
-                    _directeurController.clear();
-                    _showSnack('Entreprise modifiée avec succès !', success: true);
-                  } else {
-                    _ajouterEntreprise();
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2E7D32),
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: Text(isEdition ? 'MODIFIER' : 'ENREGISTRER'),
-            ),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
-  void _ouvrirFormulaireAjoutSousAgence(String entrepriseId, {bool isEdition = false, String? sousAgenceId}) {
-    final isLargeScreen = MediaQuery.of(context).size.width > 600;
+  // Dialog : gérer les taches assignées à une entreprise (checkboxes, avec possibilité de retirer localement ou ajouter une tâche globale)
+  Future<void> _openManageEntrepriseTachesDialog(String entrepriseId) async {
+    final entrepriseDoc = await _firestore.collection('entreprises').doc(entrepriseId).get();
+    final currentTaches = List<String>.from(entrepriseDoc.data()?['taches'] ?? []);
+    final tasksSnap = await _firestore.collection('taches').orderBy('dateCreation', descending: true).get();
+    final tasks = tasksSnap.docs;
 
-    if (isLargeScreen) {
-      showDialog(
-        context: context,
-        builder: (context) => Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          child: _buildFormAjoutSousAgence(entrepriseId, isEdition, sousAgenceId),
-        ),
-      );
-    } else {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (context) => _buildFormAjoutSousAgence(entrepriseId, isEdition, sousAgenceId),
-      );
-    }
-  }
+    final selected = Set<String>.from(currentTaches);
 
-  Widget _buildFormAjoutSousAgence(String entrepriseId, bool isEdition, String? sousAgenceId) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-        left: 24,
-        right: 24,
-        top: 24,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                isEdition ? 'Modifier sous-agence' : 'Ajouter sous-agence',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF2E7D32),
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: const Text('Gérer tâches de l\'entreprise'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    if (tasks.isEmpty) const Text('Aucune tâche globale disponible.') else
+                      Column(
+                        children: tasks.map((d) {
+                          final id = d.id;
+                          final titre = (d.data() as Map<String, dynamic>)['titre'] ?? '';
+                          return CheckboxListTile(
+                            value: selected.contains(id),
+                            title: Text(titre),
+                            controlAffinity: ListTileControlAffinity.leading,
+                            onChanged: (v) => setStateDialog(() {
+                              if (v == true) selected.add(id);
+                              else selected.remove(id);
+                            }),
+                          );
+                        }).toList(),
+                      ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () async {
+                        // create a new task global and add it to selected
+                        final res = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx2) => AlertDialog(
+                            title: const Text('Créer tâche'),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TextField(controller: _titreTacheController, decoration: const InputDecoration(labelText: 'Titre *')),
+                                const SizedBox(height: 8),
+                                TextField(controller: _descTacheController, decoration: const InputDecoration(labelText: 'Description'), maxLines: 3),
+                              ],
+                            ),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx2, false), child: const Text('Annuler')),
+                              ElevatedButton(
+                                onPressed: () async {
+                                  final titre = _titreTacheController.text.trim();
+                                  if (titre.isEmpty) return;
+                                  final newId = await _createGlobalTache(titre: titre, description: _descTacheController.text.trim());
+                                  if (newId != null) {
+                                    setStateDialog(() {
+                                      selected.add(newId);
+                                    });
+                                  }
+                                  _titreTacheController.clear();
+                                  _descTacheController.clear();
+                                  Navigator.pop(ctx2, true);
+                                },
+                                child: const Text('Créer'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (res == true) {
+                          // nothing more; selected already updated
+                        }
+                      },
+                      icon: const Icon(Icons.add),
+                      label: const Text('Créer et ajouter une tâche'),
+                    ),
+                  ],
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(context),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
+              ElevatedButton(
+                onPressed: () async {
+                  // Mettre à jour la liste 'taches' de l'entreprise et propager aux sous-agences
+                  await _updateEntreprise(entrepriseId: entrepriseId, nom: entrepriseDoc['nom'] ?? '', directeur: entrepriseDoc['directeur'] ?? '', taches: selected.toList());
+                  Navigator.pop(ctx);
+                },
+                child: const Text('ENREGISTRER'),
               ),
             ],
-          ),
-          const SizedBox(height: 20),
-          TextFormField(
-            controller: _sousAgenceNomController,
-            decoration: InputDecoration(
-              labelText: 'Nom sous-agence *',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _sousAgenceVilleController,
-            decoration: InputDecoration(
-              labelText: 'Ville (optionnel)',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () async {
-              if (isEdition && sousAgenceId != null) {
-                await _firestore
-                    .collection('entreprises')
-                    .doc(entrepriseId)
-                    .collection('sousAgences')
-                    .doc(sousAgenceId)
-                    .update({
-                  'nom': _sousAgenceNomController.text.trim(),
-                  'ville': _sousAgenceVilleController.text.trim(),
-                });
-                Navigator.pop(context);
-                _sousAgenceNomController.clear();
-                _sousAgenceVilleController.clear();
-                _showSnack('Sous-agence modifiée avec succès !', success: true);
-              } else {
-                _ajouterSousAgence(entrepriseId);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2E7D32),
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: Text(isEdition ? 'MODIFIER' : 'ENREGISTRER'),
-          ),
-        ],
-      ),
+          );
+        });
+      },
     );
   }
 
-  void _ouvrirFormulaireTache(String entrepriseId, {bool isEdition = false, String? tacheId}) {
-    final isLargeScreen = MediaQuery.of(context).size.width > 600;
+  // -------------------- WIDGETS --------------------
 
-    if (isLargeScreen) {
-      showDialog(
-        context: context,
-        builder: (context) => Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          child: _buildFormAjoutTache(entrepriseId, isEdition, tacheId),
-        ),
-      );
-    } else {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (context) => _buildFormAjoutTache(entrepriseId, isEdition, tacheId),
-      );
-    }
-  }
+  Widget _buildEntrepriseCard(QueryDocumentSnapshot entrepriseDoc) {
+    final nom = entrepriseDoc['nom'] ?? '';
+    final directeur = entrepriseDoc['directeur'] ?? '';
+    final date = (entrepriseDoc['dateCreation'] as Timestamp).toDate();
+    final data = entrepriseDoc.data() as Map<String, dynamic>;
+    final isActive = data.containsKey('isActive') ? data['isActive'] as bool : true;
 
-  Widget _buildFormAjoutTache(String entrepriseId, bool isEdition, String? tacheId) {
+
+
     return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-        left: 24,
-        right: 24,
-        top: 24,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                isEdition ? 'Modifier tâche' : 'Nouvelle tâche',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF2E7D32),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _tacheTitreController,
-            decoration: InputDecoration(
-              labelText: 'Titre de la tâche *',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _tacheDescController,
-            maxLines: 3,
-            decoration: InputDecoration(
-              labelText: 'Description',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () async {
-              if (isEdition && tacheId != null) {
-                await _firestore
-                    .collection('entreprises')
-                    .doc(entrepriseId)
-                    .collection('taches')
-                    .doc(tacheId)
-                    .update({
-                  'titre': _tacheTitreController.text.trim(),
-                  'description': _tacheDescController.text.trim(),
-                });
-                Navigator.pop(context);
-                _tacheTitreController.clear();
-                _tacheDescController.clear();
-                _showSnack('Tâche modifiée avec succès !', success: true);
-              } else {
-                _ajouterTache(entrepriseId);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2E7D32),
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: Text(isEdition ? 'MODIFIER' : 'ENREGISTRER'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSousAgenceCard(String entrepriseId, DocumentSnapshot sousAgence) {
-    final nom = sousAgence['nom'] ?? '';
-    final ville = sousAgence['ville'] ?? '';
-    final date = (sousAgence['dateCreation'] as Timestamp).toDate();
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: const Color(0xFF2E7D32).withOpacity(0.1),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Iconsax.building_4, color: Color(0xFF2E7D32), size: 20),
-        ),
-        title: Text(nom, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (ville.isNotEmpty) Text('Ville: $ville', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7))),
-            Text('Créée le: ${DateFormat('dd/MM/yyyy').format(date)}', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5), fontSize: 12)),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit_outlined, color: Colors.grey),
-              onPressed: () => _modifierSousAgence(entrepriseId, sousAgence.id, nom, ville),
-              tooltip: 'Modifier',
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.red),
-              onPressed: () => _showDeleteConfirm(() => _supprimerSousAgence(entrepriseId, sousAgence.id),
-                  title: 'Supprimer la sous-agence ?', content: 'Cette action est irréversible.'),
-              tooltip: 'Supprimer',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTacheCard(String entrepriseId, DocumentSnapshot tache) {
-    final titre = tache['titre'] ?? '';
-    final desc = tache['description'] ?? '';
-    final date = (tache['dateCreation'] as Timestamp).toDate();
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: const Color(0xFF2E7D32).withOpacity(0.1),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Iconsax.task_square, color: Color(0xFF2E7D32), size: 20),
-        ),
-        title: Text(titre, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (desc.isNotEmpty) Text(desc, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7))),
-            Text('Créée le: ${DateFormat('dd/MM/yyyy').format(date)}', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5), fontSize: 12)),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit_outlined, color: Colors.grey),
-              onPressed: () => _modifierTache(entrepriseId, tache.id, titre, desc),
-              tooltip: 'Modifier',
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.red),
-              onPressed: () => _showDeleteConfirm(() => _supprimerTache(entrepriseId, tache.id),
-                  title: 'Supprimer la tâche ?', content: 'Cette action est irréversible.'),
-              tooltip: 'Supprimer',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEntrepriseCard(DocumentSnapshot entreprise) {
-    final nom = entreprise['nom'];
-    final directeur = entreprise['directeur'];
-    final date = (entreprise['dateCreation'] as Timestamp).toDate();
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Theme.of(context).colorScheme.surface,
-            Theme.of(context).colorScheme.surface.withOpacity(0.9),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8)],
       ),
       child: ExpansionTile(
-        initiallyExpanded: false,
-        tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                const Color(0xFF2E7D32).withOpacity(0.1),
-                const Color(0xFF2E7D32).withOpacity(0.2),
-              ],
-            ),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Iconsax.building_3, color: Color(0xFF2E7D32), size: 24),
-        ),
-        title: Text(
-          nom,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        title: Row(
           children: [
-            const SizedBox(height: 4),
             Text(
-              'Dirigeant: $directeur',
+              nom,
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: isActive ? null : Colors.grey,
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              'Créée le: ${DateFormat('dd/MM/yyyy').format(date)}',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-                fontSize: 12,
+            if (!isActive)
+            const Padding(
+              padding: EdgeInsets.only(left: 8),
+              child: Text(
+                '(désactivée)',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
         ),
+        subtitle: Text(
+          'Dirigeant: $directeur • ${DateFormat('dd/MM/yyyy').format(date)}',
+          style: TextStyle(color: isActive ? null : Colors.grey),
+        ),
         trailing: PopupMenuButton<String>(
-          icon: Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.more_vert, size: 20, color: Theme.of(context).colorScheme.primary),
-          ),
-          onSelected: (value) {
-            if (value == 'edit') {
-              _modifierEntreprise(entreprise.id, nom, directeur);
-            } else if (value == 'delete') {
-              _showDeleteConfirm(() => _supprimerEntreprise(entreprise.id), title: 'Confirmer la suppression', content: 'Voulez-vous vraiment supprimer cette entreprise ?');
-            } else if (value == 'addSousAgence') {
-              _ouvrirFormulaireAjoutSousAgence(entreprise.id);
-            } else if (value == 'addTache') {
-              _ouvrirFormulaireTache(entreprise.id);
+          onSelected: (v) async {
+            final id = entrepriseDoc.id;
+            if (v == 'edit') {
+              await _openCreateEditEntrepriseDialog(entrepriseId: id, initialNom: nom, initialDirecteur: directeur);
+            } else if (v == 'delete') {
+              await _deleteEntreprise(id);
+            } else if (v == 'toggleActive') {
+              final confirm = await _confirmDialog(
+                title: isActive ? 'Désactiver entreprise' : 'Activer entreprise',
+                content: isActive
+                ? 'Cette action désactivera l’entreprise et toutes ses sous-agences.'
+                : 'Cette action réactivera l’entreprise et toutes ses sous-agences.',
+              );
+
+            if (confirm == true) {
+              await _toggleEntrepriseActive(entrepriseDoc.id, !isActive);
+            }
+          }else if (v == 'addSousAgence') {
+              // ouvrir bottom sheet pour ajouter sous-agence
+              _nomSousAgenceController.clear();
+              _villeSousAgenceController.clear();
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (ctx) => Padding(
+                  padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text('Ajouter sous-agence', style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 12),
+                      TextField(controller: _nomSousAgenceController, decoration: const InputDecoration(labelText: 'Nom *')),
+                      const SizedBox(height: 8),
+                      TextField(controller: _villeSousAgenceController, decoration: const InputDecoration(labelText: 'Ville (optionnel)')),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () async {
+                          final nomS = _nomSousAgenceController.text.trim();
+                          if (nomS.isEmpty) {
+                            _showSnack('Nom requis', success: false);
+                            return;
+                          }
+                          Navigator.pop(ctx);
+                          await _createSousAgence(id, nom: nomS, ville: _villeSousAgenceController.text.trim());
+                        },
+                        child: const Text('ENREGISTRER'),
+                      ),
+                    ]),
+                  ),
+                ),
+              );
+            } else if (v == 'manageTaches') {
+              await _openManageEntrepriseTachesDialog(entrepriseDoc.id);
             }
           },
           itemBuilder: (_) => [
-            PopupMenuItem(
-              value: 'addSousAgence',
-              child: Row(children: [const Icon(Icons.add_location_alt_outlined, size: 18), const SizedBox(width: 12), const Text('Ajouter une sous-agence')]),
-            ),
-            PopupMenuItem(
-              value: 'addTache',
-              child: Row(children: [const Icon(Iconsax.add_square, size: 18), const SizedBox(width: 12), const Text('Ajouter une tâche')]),
-            ),
-            PopupMenuItem(
-              value: 'edit',
-              child: Row(children: [const Icon(Icons.edit_outlined, size: 18), const SizedBox(width: 12), const Text('Modifier')]),
-            ),
-            PopupMenuItem(
-              value: 'delete',
-              child: Row(children: [const Icon(Icons.delete_outline, size: 18, color: Colors.red), const SizedBox(width: 12), const Text('Supprimer', style: TextStyle(color: Colors.red))]),
-            ),
+            const PopupMenuItem(value: 'addSousAgence', child: ListTile(leading: Icon(Icons.add_location_alt_outlined), title: Text('Ajouter sous-agence'))),
+            const PopupMenuItem(value: 'manageTaches', child: ListTile(leading: Icon(Iconsax.task_square), title: Text('Gérer tâches'))),
+             PopupMenuItem(
+                value: 'toggleActive',
+                child: ListTile(
+                  leading: Icon(
+                    isActive ? Icons.pause_circle_outline : Icons.play_circle_outline,
+                    color: isActive ? Colors.orange : Colors.green,
+                  ),
+                  title: Text(isActive ? 'Désactiver' : 'Activer'),
+                ),
+              ),
+            const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Modifier'))),
+            const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline, color: Colors.red), title: Text('Supprimer', style: TextStyle(color: Colors.red)))),
           ],
         ),
         children: [
+          // list sous-agences
           StreamBuilder<QuerySnapshot>(
-            stream: _firestore.collection('entreprises').doc(entreprise.id).collection('sousAgences').snapshots(),
-            builder: (context, snapshotSousAgences) {
-              final sousAgences = snapshotSousAgences.data?.docs ?? [];
-              return StreamBuilder<QuerySnapshot>(
-                stream: _firestore.collection('entreprises').doc(entreprise.id).collection('taches').snapshots(),
-                builder: (context, snapshotTaches) {
-                  final taches = snapshotTaches.data?.docs ?? [];
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Stats rapides
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.background,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            _buildStatItem(sousAgences.length, 'Sous-agences', Iconsax.building_4),
-                            _buildStatItem(taches.length, 'Tâches', Iconsax.task_square),
-                          ],
-                        ),
-                      ),
-
-                      // Sous-agences
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8),
-                        child: Text(
-                          'Sous‑agences',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
-                          ),
-                        ),
-                      ),
-                      if (sousAgences.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Text(
-                            'Aucune sous-agence',
-                            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
-                          ),
-                        )
-                      else
-                        ...sousAgences.map((s) => _buildSousAgenceCard(entreprise.id, s)).toList(),
-
-                      const SizedBox(height: 16),
-
-                      // Tâches
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Tâches',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
-                              ),
+            stream: _firestore.collection('entreprises').doc(entrepriseDoc.id).collection('sousAgences').orderBy('dateCreation', descending: true).snapshots(),
+            builder: (context, snapSous) {
+              final sous = snapSous.data?.docs ?? [];
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Sous-agences', style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8))),
+                    const SizedBox(height: 8),
+                    if (sous.isEmpty)
+                      Text('Aucune sous-agence', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6)))
+                    else
+                      ...sous.map((s) {
+                        final nomS = s['nom'] ?? '';
+                        final ville = s['ville'] ?? '';
+                        final dateS = (s['dateCreation'] as Timestamp).toDate();
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(nomS),
+                          subtitle: Text('${ville.isNotEmpty ? 'Ville: $ville • ' : ''}Créée le ${DateFormat('dd/MM/yyyy').format(dateS)}'),
+                          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined),
+                              onPressed: () {
+                                _nomSousAgenceController.text = nomS;
+                                _villeSousAgenceController.text = ville;
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  builder: (ctx2) => Padding(
+                                    padding: EdgeInsets.only(bottom: MediaQuery.of(ctx2).viewInsets.bottom),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                        Text('Modifier sous-agence', style: TextStyle(fontWeight: FontWeight.w700)),
+                                        const SizedBox(height: 12),
+                                        TextField(controller: _nomSousAgenceController, decoration: const InputDecoration(labelText: 'Nom *')),
+                                        const SizedBox(height: 8),
+                                        TextField(controller: _villeSousAgenceController, decoration: const InputDecoration(labelText: 'Ville (optionnel)')),
+                                        const SizedBox(height: 12),
+                                        ElevatedButton(
+                                          onPressed: () async {
+                                            final nomNew = _nomSousAgenceController.text.trim();
+                                            if (nomNew.isEmpty) {
+                                              _showSnack('Nom requis', success: false);
+                                              return;
+                                            }
+                                            Navigator.pop(ctx2);
+                                            await _updateSousAgence(entrepriseDoc.id, s.id, nom: nomNew, ville: _villeSousAgenceController.text.trim());
+                                          },
+                                          child: const Text('MODIFIER'),
+                                        ),
+                                      ]),
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
-                            Text(
-                              '${taches.length} tâche${taches.length != 1 ? 's' : ''}',
-                              style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6)),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              onPressed: () => _deleteSousAgence(entrepriseDoc.id, s.id),
                             ),
-                          ],
-                        ),
-                      ),
-                      if (taches.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Text(
-                            'Aucune tâche définie pour cette entreprise',
-                            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
-                          ),
-                        )
-                      else
-                        ...taches.map((t) => _buildTacheCard(entreprise.id, t)).toList(),
-
-                      const SizedBox(height: 12),
-                    ],
-                  );
-                },
+                          ]),
+                        );
+                      }).toList(),
+                  ],
+                ),
               );
             },
           ),
@@ -869,381 +959,154 @@ class _GererEntreprisesPageState extends State<GererEntreprisesPage> {
     );
   }
 
-  Widget _buildStatItem(int count, String label, IconData icon) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: const Color(0xFF2E7D32).withOpacity(0.1),
-            shape: BoxShape.circle,
+  Widget _buildEntreprisesTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('entreprises').orderBy('dateCreation', descending: true).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return Center(child: Text('Erreur: ${snapshot.error}'));
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Iconsax.buildings, size: 80, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2)),
+              const SizedBox(height: 12),
+              const Text('Aucune entreprise enregistrée', style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: () => _openCreateEditEntrepriseDialog(),
+                icon: const Icon(Icons.add),
+                label: const Text('Ajouter une entreprise'),
+              ),
+            ]),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            await Future.delayed(const Duration(milliseconds: 300));
+            return;
+          },
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: docs.length,
+            itemBuilder: (context, index) => _buildEntrepriseCard(docs[index]),
           ),
-          child: Icon(icon, color: const Color(0xFF2E7D32), size: 18),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '$count',
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF2E7D32),
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 
-  Widget _buildSearchField() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+  // -------------------- Tâches Tab --------------------
+  Widget _buildTachesTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('taches').orderBy('dateCreation', descending: true).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return Center(child: Text('Erreur: ${snapshot.error}'));
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+        final docs = snapshot.data?.docs ?? [];
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(children: [
+                const Expanded(child: Text('Tâches globales', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+                ElevatedButton.icon(onPressed: () => _openCreateEditTacheDialog(), icon: const Icon(Icons.add), label: const Text('Nouvelle')),
+              ]),
+              const SizedBox(height: 12),
+              if (docs.isEmpty)
+                Expanded(child: Center(child: Text('Aucune tâche enregistrée', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6)))))
+              else
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: docs.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, i) {
+                      final d = docs[i];
+                      final titre = (d.data() as Map<String, dynamic>)['titre'] ?? '';
+                      final desc = (d.data() as Map<String, dynamic>)['description'] ?? '';
+                      final date = ((d.data() as Map<String, dynamic>)['dateCreation'] as Timestamp).toDate();
+                      return Card(
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          title: Text(titre, style: const TextStyle(fontWeight: FontWeight.w700)),
+                          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            if ((desc as String).isNotEmpty) Text(desc),
+                            Text('Créée le ${DateFormat('dd/MM/yyyy').format(date)}', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6))),
+                          ]),
+                          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined),
+                              onPressed: () async {
+                                await _openCreateEditTacheDialog(tacheId: d.id, initialTitre: titre, initialDesc: desc);
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              onPressed: () => _deleteGlobalTache(d.id),
+                            ),
+                          ]),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
           ),
-        ],
-      ),
-      child: TextField(
-        controller: _searchController,
-        decoration: InputDecoration(
-          hintText: 'Rechercher une entreprise...',
-          prefixIcon: Icon(Icons.search, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
-          suffixIcon: _searchController.text.isNotEmpty
-              ? IconButton(
-            icon: Icon(Icons.clear, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
-            onPressed: () {
-              _searchController.clear();
-            },
-          )
-              : null,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildEntrepriseGrid(List<DocumentSnapshot> entreprises) {
-    return GridView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 1.4,
-      ),
-      itemCount: entreprises.length,
-      itemBuilder: (context, index) => _buildEntrepriseCard(entreprises[index]),
-    );
-  }
-
-  Widget _buildEntrepriseList(List<DocumentSnapshot> entreprises) {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      itemCount: entreprises.length,
-      itemBuilder: (_, index) => _buildEntrepriseCard(entreprises[index]),
-    );
-  }
-
+  // -------------------- BUILD --------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
       appBar: AppBar(
-        title: const Text(
-          'Gestion des entreprises',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white),
-        ),
+        title: const Text('Gestion Entreprises & Tâches', style: TextStyle(fontWeight: FontWeight.w700)),
         backgroundColor: const Color(0xFF2E7D32),
         elevation: 0,
-        toolbarHeight: 90,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(bottom: Radius.circular(20))),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(icon: Icon(Iconsax.buildings_2), text: 'Entreprises'),
+            Tab(icon: Icon(Iconsax.task_square), text: 'Tâches'),
+          ],
+        ),
         actions: [
           IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-              child: const Icon(Icons.search, size: 24, color: Colors.white),
-            ),
-            onPressed: () {
-              showSearch(
-                context: context,
-                delegate: _EntrepriseSearchDelegate(_allEntreprises, _modifierEntreprise),
-              );
+            icon: const Icon(Icons.sync),
+            tooltip: 'Synchroniser rapports (1 fois)',
+            onPressed: () async {
+             await _createMissingRapportsForExistingSousAgences();
+             _showSnack('Rapports synchronisés avec succès');
             },
-            tooltip: 'Rechercher',
           ),
-          IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-              child: const Icon(Iconsax.add, size: 24, color: Colors.white),
+          if (_tabController.index == 0)
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: () => _openCreateEditEntrepriseDialog(),
+              tooltip: 'Ajouter entreprise',
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: () => _openCreateEditTacheDialog(),
+              tooltip: 'Nouvelle tâche globale',
             ),
-            onPressed: () => _ouvrirFormulaireAjout(),
-            tooltip: 'Ajouter une entreprise',
-          ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isLargeScreen = constraints.maxWidth > 800;
-          final maxWidth = isLargeScreen ? 1000.0 : double.infinity;
-
-          return Center(
-            child: Container(
-              constraints: BoxConstraints(maxWidth: maxWidth),
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  // Header stats
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: _firestore.collection('entreprises').snapshots(),
-                      builder: (context, snapshot) {
-                        final count = snapshot.data?.docs.length ?? 0;
-                        return Row(
-                          children: [
-                            const Icon(Iconsax.buildings_2, color: Color(0xFF2E7D32), size: 28),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Entreprises enregistrées',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                            const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2E7D32).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Text(
-                                '$count entreprise${count != 1 ? 's' : ''}',
-                                style: const TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Search field for large screens
-                  if (isLargeScreen) _buildSearchField(),
-
-                  Expanded(
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: _firestore.collection('entreprises').orderBy('dateCreation', descending: true).snapshots(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError) {
-                          return Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.error_outline, size: 60, color: Colors.red[400]),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Erreur de chargement',
-                                  style: TextStyle(
-                                    color: Colors.red,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Veuillez réessayer plus tard',
-                                  style: TextStyle(
-                                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2E7D32)),
-                                ),
-                                SizedBox(height: 16),
-                                Text(
-                                  'Chargement des entreprises...',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-
-                        final docs = snapshot.data?.docs ?? [];
-                        _allEntreprises = docs;
-                        if (_searchController.text.isEmpty) {
-                          _filteredEntreprises = docs;
-                        }
-
-                        if (_filteredEntreprises.isEmpty) {
-                          return Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Iconsax.buildings, size: 80, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3)),
-                                const SizedBox(height: 24),
-                                Text(
-                                  _searchController.text.isEmpty ? 'Aucune entreprise enregistrée' : 'Aucun résultat trouvé',
-                                  style: TextStyle(
-                                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  _searchController.text.isEmpty
-                                      ? 'Commencez par ajouter votre première entreprise'
-                                      : 'Essayez avec d\'autres termes de recherche',
-                                  style: TextStyle(
-                                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                ElevatedButton.icon(
-                                  onPressed: () => _ouvrirFormulaireAjout(),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF2E7D32),
-                                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  ),
-                                  icon: const Icon(Iconsax.add, size: 20),
-                                  label: const Text('Ajouter une entreprise'),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-
-                        return RefreshIndicator(
-                          onRefresh: () async {
-                            await Future.delayed(const Duration(milliseconds: 300));
-                            return;
-                          },
-                          color: const Color(0xFF2E7D32),
-                          child: isLargeScreen
-                              ? _buildEntrepriseGrid(_filteredEntreprises)
-                              : _buildEntrepriseList(_filteredEntreprises),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildEntreprisesTab(),
+          _buildTachesTab(),
+        ],
       ),
-    );
-  }
-}
-
-class _EntrepriseSearchDelegate extends SearchDelegate {
-  final List<DocumentSnapshot> entreprises;
-  final Function(String, String, String) onModify;
-
-  _EntrepriseSearchDelegate(this.entreprises, this.onModify);
-
-  @override
-  List<Widget> buildActions(BuildContext context) {
-    return [
-      IconButton(
-        icon: const Icon(Icons.clear),
-        onPressed: () {
-          query = '';
-        },
-      ),
-    ];
-  }
-
-  @override
-  Widget buildLeading(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.arrow_back),
-      onPressed: () {
-        close(context, null);
-      },
-    );
-  }
-
-  @override
-  Widget buildResults(BuildContext context) {
-    return _buildSearchResults();
-  }
-
-  @override
-  Widget buildSuggestions(BuildContext context) {
-    return _buildSearchResults();
-  }
-
-  Widget _buildSearchResults() {
-    final results = entreprises.where((entreprise) {
-      final data = entreprise.data() as Map<String, dynamic>;
-      final nom = data['nom']?.toString().toLowerCase() ?? '';
-      final directeur = data['directeur']?.toString().toLowerCase() ?? '';
-      return nom.contains(query.toLowerCase()) || directeur.contains(query.toLowerCase());
-    }).toList();
-
-    return ListView.builder(
-      itemCount: results.length,
-      itemBuilder: (context, index) {
-        final entreprise = results[index];
-        final data = entreprise.data() as Map<String, dynamic>;
-        final nom = data['nom'];
-        final directeur = data['directeur'];
-        final date = (data['dateCreation'] as Timestamp).toDate();
-
-        return ListTile(
-          leading: const Icon(Iconsax.building_3, color: Color(0xFF2E7D32)),
-          title: Text(nom),
-          subtitle: Text('Dirigeant: $directeur'),
-          trailing: Text(DateFormat('dd/MM/yyyy').format(date)),
-          onTap: () {
-            close(context, null);
-            onModify(entreprise.id, nom, directeur);
-          },
-        );
-      },
     );
   }
 }

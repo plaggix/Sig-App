@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:sig_app/creer_planning_page.dart';
 import 'package:sig_app/profile_page.dart';
@@ -11,6 +12,9 @@ import 'gestion_permissions.dart';
 import 'localisation_page.dart';
 import 'message_page.dart';
 import 'tendances_page.dart';
+
+import 'package:sig_app/services/migration_service.dart';
+
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -113,7 +117,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       notificationCount: 0,
     ),
     SidebarItem(
-      title: 'Permissions',
+      title: 'Autorisations',
       icon: Icons.security_outlined,
       notificationCount: 0,
     ),
@@ -437,6 +441,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+
         ],
       ),
     );
@@ -504,6 +510,137 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  Future<void> _migrateRapportValidationsUI(BuildContext context) async {
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Migration des validations'),
+      content: const Text(
+        'Cette opération va :\n\n'
+        '• Copier les anciennes validations\n'
+        '• Créer une sous-collection "validations"\n\n'
+        '⚠️ À exécuter UNE SEULE FOIS.\n\nContinuer ?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Annuler'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Lancer'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm != true) return;
+
+  final messenger = ScaffoldMessenger.of(context);
+
+  try {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Migration des validations en cours...')),
+    );
+
+    await MigrationService.migrateRapportValidations();
+
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Migration des validations terminée'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Erreur migration : $e'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+}
+
+
+  Future<void> _migrateRapports(BuildContext context) async {
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Migration des rapports'),
+      content: const Text(
+        'Cette opération va mettre à jour TOUS les rapports existants.\n\n'
+        '• suppression de ownerUid\n'
+        '• ajout de validations {}\n'
+        '• ajout de observations {}\n\n'
+        '⚠️ Cette action est irréversible.\n\nContinuer ?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Annuler'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Lancer'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm != true) return;
+
+  final messenger = ScaffoldMessenger.of(context);
+
+  try {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Migration en cours...')),
+    );
+
+    final snap = await FirebaseFirestore.instance
+        .collection('rapports')
+        .get();
+
+    int updated = 0;
+
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      final update = <String, dynamic>{};
+
+      if (data.containsKey('ownerUid')) {
+        update['ownerUid'] = FieldValue.delete();
+      }
+      if (!data.containsKey('validations')) {
+        update['validations'] = {};
+      }
+      if (!data.containsKey('observations')) {
+        update['observations'] = {};
+      }
+
+      if (update.isNotEmpty) {
+        await doc.reference.update(update);
+        updated++;
+      }
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Migration terminée ($updated rapports mis à jour)'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Erreur migration: $e'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+}
+
+
   Widget _getPageForSelectedIndex(int index) {
     switch(index) {
       case 0: // Acceuil
@@ -513,14 +650,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
       case 2: // Planning
         return PlanningPage();
       case 3: // Entreprises & Tâches
-        return GererEntreprisesPage();
-      case 4: // Permissions
+        return GererEntreprisesTachesPage();
+      case 4: // Autorisations
         return GestionPermissionsPage();
       case 5: // Rapports
-        return CreationFicheControlePage();
-      case 6: // Tendances IA
-        return TendancesPage();
-      case 7: // Messages
+        return AdminRapportsPage();
+      case 6: // Messages
         return MessagePage();
       default:
         return _buildDefaultContent(index);
@@ -563,6 +698,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
             textAlign: TextAlign.center,
           ),
           SizedBox(height: 24),
+          ElevatedButton.icon(
+             icon: const Icon(Icons.sync),
+             label: const Text('Migrer les validations'),
+             style: ElevatedButton.styleFrom(
+               backgroundColor: Colors.red,
+              ),
+             onPressed: () => _migrateRapportValidationsUI(context),
+            ),
           ElevatedButton(
             onPressed: () {},
             child: Text('Accéder'),

@@ -33,6 +33,7 @@ class _MessagePageState extends State<MessagePage> {
   File? _pickedFile;
 
   Map<String, dynamic>? _selectedUser;
+  Map<String, int> _unreadCountCache = {};
 
   User? get currentUser => _auth.currentUser;
 
@@ -113,6 +114,43 @@ class _MessagePageState extends State<MessagePage> {
 
     _scrollToBottom();
   }
+
+  Future<void> _sendMessageToAll({String? text, String? type, String? url}) async {
+  if ((text == null || text.trim().isEmpty) && url == null) return;
+  if (currentUser == null) return;
+
+  // Récupérer tous les utilisateurs sauf l'utilisateur courant
+  final usersSnapshot = await _firestore.collection('users').get();
+  final users = usersSnapshot.docs.where((u) => u['uid'] != currentUser!.uid).toList();
+
+await Future.wait(users.map((user) async {
+  final uid = user['uid'];
+  final id = chatId(currentUser!.uid, uid);
+  final msg = {
+    'sender': currentUser!.uid,
+    'receiver': uid,
+    'text': text ?? '',
+    'type': type ?? 'text',
+    'url': url,
+    'timestamp': FieldValue.serverTimestamp(),
+    'read': false,
+  };
+
+  await _firestore.collection('chats').doc(id).collection('messages').add(msg);
+
+  await _firestore.collection('chats').doc(id).set({
+    'lastMessage': msg['text'] ?? (msg['type'] ?? '...'),
+    'lastTimestamp': FieldValue.serverTimestamp(),
+    'lastSender': currentUser!.uid,
+  }, SetOptions(merge: true));
+}));
+
+  _messageController.clear();
+  setState(() {
+    _pickedImage = null;
+    _pickedFile = null;
+  });
+}
 
   Future<String?> _uploadFile(File file, String folder) async {
     final name = DateTime.now().millisecondsSinceEpoch.toString();
@@ -292,7 +330,17 @@ class _MessagePageState extends State<MessagePage> {
         if (!snapUsers.hasData) return const Center(child: CircularProgressIndicator());
         final users = snapUsers.data!;
         // Optionnel: trier par nom
-        users.sort((a, b) => (a['name'] ?? '').toString().toLowerCase().compareTo((b['name'] ?? '').toString().toLowerCase()));
+        users.sort((a, b) {
+        final idA = chatId(currentUser!.uid, a['uid']);
+        final idB = chatId(currentUser!.uid, b['uid']);
+
+        final unreadA = (_unreadCountCache[idA] ?? 0);
+        final unreadB = (_unreadCountCache[idB] ?? 0);
+
+        if (unreadA != unreadB) return unreadB.compareTo(unreadA); // priorité aux non lus
+        return (a['name'] ?? '').toLowerCase().compareTo((b['name'] ?? '').toLowerCase());
+      });
+
 
         return ListView.builder(
           itemCount: users.length,
@@ -331,6 +379,7 @@ class _MessagePageState extends State<MessagePage> {
                   builder: (context, unreadSnap) {
                     int unread = 0;
                     if (unreadSnap.hasData) unread = unreadSnap.data!.docs.length;
+                    _unreadCountCache[id] = unread;
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: Colors.orange[400],
@@ -339,8 +388,20 @@ class _MessagePageState extends State<MessagePage> {
                       title: Text(user['name'] ?? 'No name', style: const TextStyle(fontWeight: FontWeight.w600)),
                       subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
                       trailing: unread > 0
-                          ? CircleAvatar(radius: 12, backgroundColor: Colors.red, child: Text('$unread', style: const TextStyle(color: Colors.white, fontSize: 12)))
+                          ? CircleAvatar(
+                              radius: 12,
+                              backgroundColor: Colors.orange, // badge orange
+                              child: Text(
+                                '$unread',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
                           : (lastDate != null ? Text(_formatTime(lastDate)) : null),
+
                       selected: _selectedUser?['uid'] == user['uid'],
                       onTap: () {
                         setState(() => _selectedUser = user);
@@ -483,6 +544,38 @@ class _MessagePageState extends State<MessagePage> {
                     if (url != null) await _sendMessage(type: 'file', url: url);
                   } else {
                     await _sendMessage(text: _messageController.text.trim());
+                  }
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.campaign),
+                color: Colors.orange[700], // optionnel : rouge pour différencier
+                tooltip: 'Envoyer à tous',
+                onPressed: () async {
+                  final text = _messageController.text.trim();
+                  if (text.isEmpty) return;
+    
+                  // Confirmation avant envoi massif
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text('Envoyer à tous'),
+                      content: const Text('Voulez-vous vraiment envoyer ce message à tous les utilisateurs ?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Annuler'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Envoyer'),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirm == true) {
+                    await _sendMessageToAll(text: text);
                   }
                 },
               ),

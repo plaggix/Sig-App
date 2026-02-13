@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:intl/date_symbol_data_file.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 
 import 'package:sig_app/welcome.dart';
 import 'package:sig_app/wrapper.dart';
 import 'firebase_options.dart';
 import 'auth_provider.dart';
-import 'home_page.dart';
 import 'home_administrateur.dart';
 import 'home_controleur.dart';
 import 'login_page.dart';
@@ -39,6 +39,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('fr_FR', null);
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -120,8 +121,17 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'SIG',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
+      locale: const Locale('fr', 'FR'),
+      supportedLocales: const [
+       Locale('fr', 'FR'),
+      ],
+     localizationsDelegates: const [
+       GlobalMaterialLocalizations.delegate,
+       GlobalWidgetsLocalizations.delegate,
+       GlobalCupertinoLocalizations.delegate,
+      ],
+     theme: ThemeData(
+       primarySwatch: Colors.blue,
       ),
       home: Wrapper(),
       routes: {

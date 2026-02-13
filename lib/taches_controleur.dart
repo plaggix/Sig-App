@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'planning_semaine_personnel.dart';
+import 'historiques_non_termine.dart';
+
 
 class TachesDuJourPage extends StatefulWidget {
   const TachesDuJourPage({super.key});
@@ -230,6 +232,20 @@ class _TachesDuJourPageState extends State<TachesDuJourPage> with SingleTickerPr
             onPressed: _goToWeeklyPlanning,
             tooltip: 'Voir planning de la semaine',
           ),
+
+           IconButton(
+             icon: const Icon(Icons.history_rounded, color: Colors.white),
+             tooltip: 'Tâches non terminées',
+             onPressed: () {
+               Navigator.push(
+                 context,
+                 MaterialPageRoute(
+                   builder: (_) => const HistoriquesNonTerminePage(),
+                  ),
+                );
+              },
+            ),
+
           _refreshing
               ? Padding(
             padding: const EdgeInsets.all(8.0),
