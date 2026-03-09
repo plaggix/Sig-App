@@ -66,7 +66,8 @@ Widget _buildTaskCard(Map<String, dynamic> t) {
   final statut = t['statut'] ?? '';
   final date = (t['date'] as Timestamp).toDate();
   final List<String> reaffecteeNoms =
-      List<String>.from(t['reaffecteeANoms'] ?? []);
+    (t['reaffecteeANoms'] as List?)?.map((e) => e.toString()).toList() ?? [];
+
 
   String label;
   Color color;
@@ -122,18 +123,20 @@ Widget _buildTaskCard(Map<String, dynamic> t) {
             ),
           ),
 
-          if (statut == 'reaffectee' && reaffecteeNoms.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Réaffectée à ${reaffecteeNoms.join(', ')}',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.blue.shade700,
-                  fontWeight: FontWeight.w600,
-                ),
+         if (statut == 'reaffectee')
+          Padding(
+           padding: const EdgeInsets.only(top: 8),
+           child: Text(
+             reaffecteeNoms.isNotEmpty
+             ? 'Réaffectée à ${reaffecteeNoms.join(', ')}'
+             : 'Réaffectée',
+             style: TextStyle(
+               fontSize: 13,
+               color: Colors.blue.shade700,
+               fontWeight: FontWeight.w600,
               ),
             ),
+          ),
         ],
       ),
     ),

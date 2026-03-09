@@ -67,43 +67,35 @@ class _PlanningSemainePersonnelState extends State<PlanningSemainePersonnel> wit
     final samedi = lundi.add(const Duration(days: 5));
 
     for (final doc in userPlanningSnapshot.docs) {
-      final data = doc.data();
-      final jours = data['jours'] as Map<String, dynamic>?;
-      if (jours != null) {
-        jours.forEach((jour, activities) {
-          if (activities is List) {
-            for (final item in activities) {
-              final date = (item['date'] as Timestamp?)?.toDate() ?? _getDateFromJour(jour);
+     final data = doc.data();
 
-              // 🔹 Filtrer uniquement les activités de la semaine en cours
-              if (date.isAfter(lundi.subtract(const Duration(days: 1))) &&
-                  date.isBefore(samedi.add(const Duration(days: 1)))) {
-                // Sécurité : une tâche DOIT appartenir à un rapport
-                final rapportId = item['rapportId'];
+     final date = (data['date'] as Timestamp?)?.toDate();
+     if (date == null) continue;
 
-                if (rapportId == null || rapportId.toString().isEmpty) {
-                 // on ignore les anciennes tâches cassées
-                 continue;
-                }
+     if (date.isAfter(lundi.subtract(const Duration(days: 1))) &&
+      date.isBefore(samedi.add(const Duration(days: 1)))) {
 
-                allTasks.add({
-                  'id': item['id'] ?? doc.id,
-                  'tache': item['tache'] ?? item['activite'] ?? 'Tâche sans nom',
-                  'entreprise': item['sousAgence'] ?? item['entreprise'] ?? 'Entreprise non précisée',
-                  'date': Timestamp.fromDate(date),
-                  'statut': item['statut'] ?? (item['effectue'] == true ? 'terminee' : 'inachevee'),
-                  'jour': jour,
-                  'effectue': item['effectue'] ?? false,
-                  'rapportId': item['rapportId'],
-                  'entrepriseId': item['entrepriseId'] ?? '',
-                  'sousAgenceId': item['sousAgenceId'] ?? '',
-                });
-              }
-            }
-          }
-        });
-      }
+       final rapportId = data['rapportId'];
+
+       if (rapportId == null || rapportId.toString().isEmpty) {
+         continue;
+        }
+
+      allTasks.add({
+       'id': data['id'] ?? doc.id,
+       'tache': data['tache'] ?? 'Tâche sans nom',
+       'entreprise': data['entreprise'] ?? '',
+       'sousAgence': data['sousAgence'] ?? '',
+       'date': data['date'],
+       'statut': data['statut'] ?? 'inachevee',
+       'jour': data['jour'],
+       'effectue': data['effectue'] ?? false,
+       'rapportId': rapportId,
+       'entrepriseId': data['entrepriseId'] ?? '',
+       'sousAgenceId': data['sousAgenceId'] ?? '',
+      });
     }
+  }
 
     if (!mounted) return;
     setState(() {
@@ -918,7 +910,7 @@ class TacheTile extends StatelessWidget {
             children: [
               const SizedBox(height: 4),
               Text(
-                planning['entreprise'],
+                '${planning['sousAgence']} • ${planning['entreprise']}',
                 style: TextStyle(
                   fontSize: 14,
                   color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),

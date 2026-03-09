@@ -144,9 +144,9 @@ class _PlanningPageState extends State<PlanningPage>
       
       if (!data.containsKey('sousAgenceId')) {
         // On essaye de récupérer à partir du nom de sous-agence
-        final sous = _sousAgences.firstWhere(
-            (s) => s['nom'] == data['sousAgence'],
-            orElse: () => {});
+        final Map<String, dynamic> sous = _sousAgences.firstWhere(
+         (s) => s['nom'] == data['sousAgence'],
+         orElse: () => {},);
         updateData['sousAgenceId'] = sous['id'] ?? '';
         updateData['entrepriseId'] = sous['entrepriseId'] ?? '';
       }
@@ -202,6 +202,7 @@ class _PlanningPageState extends State<PlanningPage>
 
   /// ENREGISTRER TOUTE LA SEMAINE D'UN COUP
   Future<void> _enregistrerPlanningSemaine() async {
+    try {
     if (_selectedStartOfWeek == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -233,25 +234,27 @@ class _PlanningPageState extends State<PlanningPage>
             List<String>.from(p['controleurs'] ?? []);
         final sousAgence = p['sousAgence'];
         final entrepriseId = p['entrepriseId'];
+        final sousAgenceId = p['sousAgenceId'];
 
-        if (taches.isEmpty ||
-            controleurs.isEmpty ||
-            sousAgence == null ||
-            entrepriseId == null) {
-          continue;
-        }
+       if (taches.isEmpty ||
+         controleurs.isEmpty ||
+         sousAgence == null ||
+         entrepriseId == null ||
+         sousAgenceId == null) {
+           continue;
+          }
 
         // Récupérer le nom de l'entreprise
-        final sousAgenceData = _sousAgences.firstWhere(
-          (s) => s['nom'] == sousAgence,
-          orElse: () => <String, dynamic>{},
+        final Map<String, dynamic> sousAgenceData = _sousAgences.firstWhere(
+         (s) => s['nom'] == sousAgence,
+         orElse: () => {},
         );
         final entrepriseNom = sousAgenceData['entrepriseNom'] ?? '';
 
         // 1️⃣ RÉCUPÉRER OU CRÉER LE RAPPORT
         final rapportQuery = await _firestore
             .collection('rapports')
-            .where('sousAgenceId', isEqualTo: p['sousAgenceId'])
+            .where('sousAgenceId', isEqualTo: sousAgenceId)
             .where('semaine', isEqualTo: dateStr)
             .limit(1)
             .get();
@@ -266,7 +269,7 @@ class _PlanningPageState extends State<PlanningPage>
           final rapportRef = await _firestore.collection('rapports').add({
             'entrepriseId': entrepriseId,
             'entrepriseNom': entrepriseNom,
-            'sousAgenceId': p['sousAgenceId'],
+            'sousAgenceId': sousAgenceId,
             'sousAgenceNom': sousAgence,
             'semaine': dateStr,
             'createdAt': Timestamp.now(),
@@ -284,7 +287,7 @@ class _PlanningPageState extends State<PlanningPage>
           final existingTaskQuery = await _firestore
             .collection('plannings')
             .where('tache', isEqualTo: tacheTitre)
-            .where('sousAgenceId', isEqualTo: p['sousAgenceId'])
+            .where('sousAgenceId', isEqualTo: sousAgenceId)
             .where('statut', isEqualTo: 'inachevee')
             .limit(1)
             .get();
@@ -293,9 +296,22 @@ class _PlanningPageState extends State<PlanningPage>
               final oldTask = existingTaskQuery.docs.first;
 
               // 1️⃣ marquer l’ancienne comme réaffectée
-              await oldTask.reference.update({
-                'statut': 'reaffectee',
-              });
+              // récupérer les noms des contrôleurs sélectionnés
+              final List<String> reaffecteeNoms = controleurs.map((ctrlId) {
+               final ctrl = _controleurs.cast<Map<String, dynamic>>().firstWhere(
+                 (c) => c['uid'] == ctrlId,
+                 orElse: () => <String, dynamic>{'uid': '', 'name': 'Inconnu'},
+                );
+               return (ctrl['name'] ?? 'Inconnu').toString();
+              }).toList();
+
+               // mise à jour de l'ancienne tâche
+               await oldTask.reference.update({
+                 'statut': 'reaffectee',
+                 'reaffecteeA': controleurs, // IDs
+                 'reaffecteeANoms': reaffecteeNoms, // NOMS (important pour affichage)
+                });
+
 
               // 2️⃣ reprendre la même identité logique
               taskInstanceId = oldTask['taskInstanceId'];
@@ -303,18 +319,18 @@ class _PlanningPageState extends State<PlanningPage>
 
          final activityMap = {
             'id': taskDocId,
-            'taskInstanceId': taskInstanceId, // ⭐ AJOUT OBLIGATOIRE
+            'taskInstanceId': taskInstanceId, 
             'tache': tacheTitre,
             'entrepriseId': entrepriseId,
             'entreprise': entrepriseNom,
             'sousAgence': sousAgence,
-            'sousAgenceId': p['sousAgenceId'],
+            'sousAgenceId': sousAgenceId,
             'rapportId': rapportId,
-            'assignedTo': controleurs, // logique actuelle conservée
+            'controleurs': controleurs, 
             'note': p['note'] ?? '',
             'date': Timestamp.fromDate(date),
             'effectue': false,
-            'statut': 'inachevee', // IMPORTANT
+            'statut': 'inachevee', 
             'semaine': dateStr,
             'jour': jour,
           };
@@ -332,10 +348,10 @@ class _PlanningPageState extends State<PlanningPage>
 
            await userPlanningRef.set({
               'id': taskDocId,
-              'taskInstanceId': taskInstanceId, // AJOUT
+              'taskInstanceId': taskInstanceId, 
               'rapportId': rapportId,
               'entrepriseId': entrepriseId,
-              'sousAgenceId': activityMap['sousAgenceId'],
+              'sousAgenceId': sousAgenceId,
               'semaine': dateStr,
               'statut': 'inachevee',
               'effectue': false,
@@ -361,7 +377,17 @@ class _PlanningPageState extends State<PlanningPage>
 
     _resetForm();
     await _chargerDonnees();
+  } catch (e) {
+    print("ERREUR ENREGISTREMENT: $e");
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Erreur: $e"),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
+}
 
   void _resetForm() {
     setState(() {
@@ -461,9 +487,9 @@ class _PlanningPageState extends State<PlanningPage>
               }).toList(),
               onChanged: (value) {
                 if (value == null) return;
-                final sa = _sousAgences.firstWhere(
-                  (s) => s['nom'] == value,
-                  orElse: () => <String, dynamic>{},
+                final Map<String, dynamic> sa = _sousAgences.firstWhere(
+                 (s) => s['nom'] == value,
+                 orElse: () => {},
                 );
 
                 if (sa['entrepriseActive'] == false || sa['sousAgenceActive'] == false) {
@@ -559,15 +585,21 @@ class _PlanningPageState extends State<PlanningPage>
                     else
                       Wrap(
                         spacing: 6,
-                        children: (p['controleurs'] as List)
-                            .map<Widget>((id) => Chip(
-                                  label: Text(
-                                    _controleurs.firstWhere(
-                                        (c) => c['uid'] == id)['name'],
-                                  ),
-                                  backgroundColor:
-                                      _colorScheme.primaryContainer,
-                                ))
+                        children: (p['controleurs'] as List<String>)
+                            .map<Widget>((id) {
+                              final ctrl = _controleurs.cast<Map<String, dynamic>>().firstWhere(
+                               (c) => c['uid'] == id,
+                               orElse: () => <String, dynamic>{
+                                 'uid': '',
+                                 'name': 'Inconnu'
+                                },
+                              );
+
+                              return Chip(
+                               label: Text(ctrl['name'] ?? 'Inconnu'),
+                               backgroundColor: _colorScheme.primaryContainer,
+                              );
+                            })
                             .toList(),
                       ),
                   ],
@@ -602,7 +634,7 @@ class _PlanningPageState extends State<PlanningPage>
                   Expanded(
                     child: ListView(
                       children: _controleurs.map((c) {
-                        final isSelected = (planning['controleurs'] as List)
+                        final isSelected = (planning['controleurs'] as List<String>)
                             .contains(c['uid']);
                         return CheckboxListTile(
                           value: isSelected,
@@ -613,7 +645,7 @@ class _PlanningPageState extends State<PlanningPage>
                                 (planning['controleurs'] as List<String>)
                                     .add(c['uid']);
                               } else {
-                                planning['controleurs'].remove(c['uid']);
+                                (planning['controleurs'] as List<String>).remove(c['uid']);
                               }
                             });
                             setState(() {});

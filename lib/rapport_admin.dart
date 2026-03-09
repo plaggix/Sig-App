@@ -14,77 +14,115 @@ class AdminRapportsPage extends StatefulWidget {
 class _AdminRapportsPageState extends State<AdminRapportsPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // 🔹 FILTRES
   String _controleurFilter = '';
   String _rapportFilter = '';
 
-  String? _selectedControleurUid;
-  String? _selectedControleurName;
+  // 🔹 UTILISATEUR SÉLECTIONNÉ
+  DocumentSnapshot? _selectedControleur;
+  List<DocumentSnapshot> _reports = [];
+
+  final _green = const Color(0xFF2E7D32);
+  final _orange = Colors.orange;
+  final _grey = Colors.grey;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF2E7D32),
-        title: Text(
-          _selectedControleurName == null
-              ? 'Rapports des contrôleurs'
-              : 'Rapports • $_selectedControleurName',
-        ),
-        leading: _selectedControleurUid != null
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () {
-                  setState(() {
-                    _selectedControleurUid = null;
-                    _selectedControleurName = null;
-                  });
-                },
-              )
-            : null,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // ================= FILTRES =================
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Rechercher un contrôleur',
-                prefixIcon: Icon(Icons.person_search),
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (v) {
-                setState(() => _controleurFilter = v.trim().toLowerCase());
-              },
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Rechercher un rapport / sous-agence',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (v) {
-                setState(() => _rapportFilter = v.trim().toLowerCase());
-              },
-            ),
-            const SizedBox(height: 16),
+  void initState() {
+    super.initState();
+  }
 
-            // ================= CONTENU =================
-            Expanded(
-              child: _selectedControleurUid == null
-                  ? _buildControleursList()
-                  : _buildRapportsList(),
+Future<void> _loadReportsForSelectedControleur() async {
+  if (_selectedControleur == null) {
+    setState(() => _reports = []);
+    return;
+  }
+
+  final snap = await _firestore
+      .collection('rapports')
+      .orderBy('sousAgenceNom')
+      .get();
+
+  setState(() {
+    _reports = snap.docs;
+  });
+}
+
+  // =======================
+  // UI BUILDERS
+  // =======================
+
+  Widget _buildReportCard(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final sousAgence = data['sousAgenceNom'] ?? '';
+    final entreprise = data['entrepriseNom'] ?? '';
+    final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => RapportTablePage(
+              rapportId: doc.id,
+              readOnly: true,
+              forcedUserUid: _selectedControleur!.id,
             ),
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 6,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _green.withOpacity(0.12),
+              ),
+              child: Icon(Icons.assignment_rounded, color: _green),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$entreprise • $sousAgence',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  if (createdAt != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Créé le ${DateFormat('dd/MM/yyyy HH:mm').format(createdAt)}',
+                        style: TextStyle(color: _grey, fontSize: 13),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const Icon(Icons.lock_outline, color: Colors.grey, size: 18),
           ],
         ),
       ),
     );
   }
 
-  // ============================================================
-  // 🔵 LISTE DES CONTRÔLEURS
-  // ============================================================
   Widget _buildControleursList() {
     return StreamBuilder<QuerySnapshot>(
       stream: _firestore
@@ -103,22 +141,32 @@ class _AdminRapportsPageState extends State<AdminRapportsPage> {
         }).toList();
 
         if (filtered.isEmpty) {
-          return const Text('Aucun contrôleur trouvé');
+          return Center(
+            child: Text(
+              'Aucun contrôleur trouvé',
+              style: TextStyle(color: _grey),
+            ),
+          );
         }
 
         return ListView.builder(
           itemCount: filtered.length,
-          itemBuilder: (context, index) {
-            final doc = filtered[index];
+          itemBuilder: (_, i) {
+            final doc = filtered[i];
             return Card(
               child: ListTile(
-                leading: const Icon(Icons.person),
+                leading: CircleAvatar(
+                  backgroundColor: _orange.withOpacity(0.15),
+                  child: const Icon(Icons.person_outline, color: Colors.orange),
+                ),
                 title: Text(doc['name'] ?? 'Contrôleur'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () async {
                   setState(() {
-                    _selectedControleurUid = doc.id;
-                    _selectedControleurName = doc['name'];
+                    _selectedControleur = doc;
+                  });
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _loadReportsForSelectedControleur();
                   });
                 },
               ),
@@ -129,71 +177,100 @@ class _AdminRapportsPageState extends State<AdminRapportsPage> {
     );
   }
 
-  // ============================================================
-  // 🟢 LISTE DES RAPPORTS DU CONTRÔLEUR
-  // ============================================================
-  Widget _buildRapportsList() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore
-          .collection('rapports')
-          .where('validatedByUid', isEqualTo: _selectedControleurUid)
-          .orderBy('createdAt', descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
+  Widget _buildReportsList() {
+    final filteredReports = _reports.where((doc) {
+     final data = doc.data() as Map<String, dynamic>;
 
-        final filtered = snapshot.data!.docs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          final sousAgence =
-              (data['entrepriseNom'] ?? data['sousAgenceNom'] ?? '').toString().toLowerCase();
+     final entreprise = (data['entrepriseNom'] ?? '').toString().toLowerCase();
+     final sousAgence = (data['sousAgenceNom'] ?? '').toString().toLowerCase();
+     
+     final searchTerm = _rapportFilter.toLowerCase();
 
-          return _rapportFilter.isEmpty ||
-              sousAgence.contains(_rapportFilter);
-        }).toList();
+     final matchRapport = _rapportFilter.isEmpty ||
+      entreprise.contains(searchTerm) ||
+      sousAgence.contains(searchTerm);
 
-        if (filtered.isEmpty) {
-          return const Text('Aucun rapport trouvé');
-        }
+     return matchRapport;
+    }).toList();
 
-        return ListView.builder(
-          itemCount: filtered.length,
-          itemBuilder: (context, index) {
-            final doc = filtered[index];
-            final data = doc.data() as Map<String, dynamic>;
+    if (filteredReports.isEmpty) {  
+      return Center(
+        child: Text(
+          'Aucun rapport trouvé',
+          style: TextStyle(color: _grey),
+        ),
+      );
+    }
 
-            return Card(
-              child: ListTile(
-                title: Text(
-                  '${data['entrepriseNom']} • ${data['sousAgenceNom']}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+    return ListView.builder(
+      itemCount: filteredReports.length,
+      itemBuilder: (_, i) => _buildReportCard(filteredReports[i]),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F6F7),
+      appBar: AppBar(
+        backgroundColor: _green,
+        title: Text(_selectedControleur == null
+            ? 'Rapports des contrôleurs'
+            : 'Rapports • ${_selectedControleur!['name']}'),
+        leading: _selectedControleur != null
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () {
+                  setState(() {
+                    _selectedControleur = null;
+                    _reports = [];
+                    _rapportFilter = '';
+                  });
+                },
+              )
+            : null,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // 🔹 FILTRE CONTRÔLEURS
+            if (_selectedControleur == null)
+              TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Rechercher un contrôleur',
+                  prefixIcon: Icon(Icons.person_search),
+                  border: OutlineInputBorder(),
                 ),
-                subtitle: data['createdAt'] != null
-                    ? Text(
-                        'Créé le ${DateFormat('dd/MM/yyyy HH:mm').format(
-                          (data['createdAt'] as Timestamp).toDate(),
-                        )}',
-                      )
-                    : null,
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => RapportTablePage(
-                        rapportId: doc.id,
-                        readOnly: true, // 🔐 admin = lecture seule
-                        forcedUserUid: _selectedControleurUid,
-                      ),
-                    ),
-                  );
+                onChanged: (v) {
+                  setState(() => _controleurFilter = v.trim().toLowerCase());
                 },
               ),
-            );
-          },
-        );
-      },
+            if (_selectedControleur == null) const SizedBox(height: 12),
+
+            // 🔹 FILTRE RAPPORTS
+            if (_selectedControleur != null)
+              TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Rechercher un rapport / sous-agence',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (v) {
+                  setState(() => _rapportFilter = v.trim().toLowerCase());
+                },
+              ),
+            if (_selectedControleur != null) const SizedBox(height: 16),
+
+            // 🔹 CONTENU
+            Expanded(
+              child: _selectedControleur == null
+                  ? _buildControleursList()
+                  : _buildReportsList(),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
