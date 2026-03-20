@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
-import 'package:cloudinary_sdk/cloudinary_sdk.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 import 'login_page.dart';
 
@@ -16,13 +16,10 @@ class _ProfilePageState extends State<ProfilePage> {
   User? user = FirebaseAuth.instance.currentUser;
   Map<String, dynamic>? userData;
   bool _isUploading = false;
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
-  // Initialisation Cloudinary
-  final cloudinary = Cloudinary.full(
-    apiKey: "812513655819511",
-    apiSecret: "tqJWTY3YF3Sw",
-    cloudName: "djwxfhlid",
-  );
 
   @override
   void initState() {
@@ -42,47 +39,50 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _uploadProfilePicture() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+Future<void> _uploadProfilePicture() async {
+  final picker = ImagePicker();
+  final pickedFile = await picker.pickImage(source: ImageSource.gallery);
 
-    if (pickedFile == null) return;
+  if (pickedFile == null) return;
 
-    setState(() => _isUploading = true);
+  setState(() => _isUploading = true);
 
-    try {
-      // Upload vers Cloudinary
-      final response = await cloudinary.uploadResource(
-        CloudinaryUploadResource(
-          filePath: pickedFile.path,
-          resourceType: CloudinaryResourceType.image,
-          folder: "profile_pictures", // dossier sur ton compte Cloudinary
-          publicId: user!.uid, // nom unique par utilisateur
-        ),
-      );
+  try {
+    final url = Uri.parse("https://api.cloudinary.com/v1_1/djwxfhlid/image/upload");
 
-      if (response.isSuccessful) {
-        String downloadUrl = response.secureUrl!;
+    var request = http.MultipartRequest("POST", url);
 
-        // Mise à jour Firestore avec l'URL Cloudinary
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user!.uid)
-            .update({'profilePicture': downloadUrl});
+    request.fields['upload_preset'] = 'profile_unsigned'; // mon preset
+    request.files.add(
+      await http.MultipartFile.fromPath('file', pickedFile.path),
+    );
 
-        setState(() {
-          userData!['profilePicture'] = downloadUrl;
-          _isUploading = false;
-        });
-      } else {
-        print("Erreur Cloudinary : ${response.error}");
-        setState(() => _isUploading = false);
-      }
-    } catch (e) {
-      print("Erreur upload : $e");
+    var response = await request.send();
+
+    var responseData = await response.stream.bytesToString();
+    final data = jsonDecode(responseData);
+
+    if (response.statusCode == 200) {
+      String downloadUrl = data['secure_url'];
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user!.uid)
+          .update({'profilePicture': downloadUrl});
+
+      setState(() {
+        userData!['profilePicture'] = downloadUrl;
+        _isUploading = false;
+      });
+    } else {
+      print("Erreur Cloudinary: $data");
       setState(() => _isUploading = false);
     }
+  } catch (e) {
+    print("Erreur upload: $e");
+    setState(() => _isUploading = false);
   }
+}
 
   void _logout() async {
     await FirebaseAuth.instance.signOut();
@@ -91,6 +91,105 @@ class _ProfilePageState extends State<ProfilePage> {
       MaterialPageRoute(builder: (context) => LoginPage()),
     );
   }
+
+  void _showEditProfileDialog() {
+  _nameController.text = userData?['name'] ?? '';
+  _emailController.text = userData?['email'] ?? '';
+
+  showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text("Modifier mes informations"),
+        content: SingleChildScrollView(
+          child: Column(
+            children: [
+
+              TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: "Nom complet",
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              TextField(
+                controller: _emailController,
+                decoration: const InputDecoration(
+                  labelText: "Adresse email",
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              TextField(
+                controller: _passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: "Nouveau mot de passe",
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            child: const Text("Annuler"),
+            onPressed: () => Navigator.pop(context),
+          ),
+          FilledButton(
+            child: const Text("Enregistrer"),
+            onPressed: () {
+              Navigator.pop(context);
+              _updateUserProfile();
+            },
+          ),
+        ],
+      );
+    },
+  );
+}
+
+Future<void> _updateUserProfile() async {
+  try {
+    String newName = _nameController.text.trim();
+    String newEmail = _emailController.text.trim();
+    String newPassword = _passwordController.text.trim();
+
+    if (newName.isNotEmpty) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user!.uid)
+          .update({'name': newName});
+    }
+
+    if (newEmail.isNotEmpty && newEmail != user!.email) {
+      await user!.updateEmail(newEmail);
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user!.uid)
+          .update({'email': newEmail});
+    }
+
+    if (newPassword.isNotEmpty) {
+      await user!.updatePassword(newPassword);
+    }
+
+    await _getUserData();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Profil mis à jour")),
+    );
+  } catch (e) {
+    print(e);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Erreur lors de la mise à jour")),
+    );
+  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -286,29 +385,40 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildInfoSection() {
-    return ProfileSection(
-      title: 'Mes Informations',
-      icon: Icons.info_outline,
-      children: [
-        _buildInfoItem(
-          icon: Icons.person_outline,
-          label: 'Nom complet',
-          value: userData!['name'] ?? 'N/A',
+ Widget _buildInfoSection() {
+  return ProfileSection(
+    title: 'Mes Informations',
+    icon: Icons.info_outline,
+    children: [
+      _buildInfoItem(
+        icon: Icons.person_outline,
+        label: 'Nom complet',
+        value: userData!['name'] ?? 'N/A',
+      ),
+      _buildInfoItem(
+        icon: Icons.email_outlined,
+        label: 'Adresse email',
+        value: userData!['email'] ?? 'N/A',
+      ),
+      _buildInfoItem(
+        icon: Icons.badge_outlined,
+        label: 'Rôle',
+        value: userData!['role'] ?? 'N/A',
+      ),
+
+      const SizedBox(height: 10),
+
+      Padding(
+        padding: const EdgeInsets.all(16),
+        child: FilledButton.icon(
+          onPressed: _showEditProfileDialog,
+          icon: const Icon(Icons.edit),
+          label: const Text("Modifier mes informations"),
         ),
-        _buildInfoItem(
-          icon: Icons.email_outlined,
-          label: 'Adresse email',
-          value: userData!['email'] ?? 'N/A',
-        ),
-        _buildInfoItem(
-          icon: Icons.badge_outlined,
-          label: 'Rôle',
-          value: userData!['role'] ?? 'N/A',
-        ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
+}
 
   Widget _buildInfoItem({
     required IconData icon,

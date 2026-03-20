@@ -123,13 +123,13 @@ class _TachesDuJourPageState extends State<TachesDuJourPage> with SingleTickerPr
               final isInachevee = statut == 'inachevee';
               final isTerminee = statut == 'terminee';
 
-              if ((isToday && !isTerminee) || (!isToday && isInachevee)) {
-                displayedTasks.add({
-                  'id': item['id'] ?? doc.id,
-                  'tache': item['tache'] ?? item['activite'] ?? 'Tâche inconnue',
-                  'entreprise': item['entreprise'] ?? 'Entreprise non précisée',
-                  'statut': statut.isEmpty ? 'en_attente' : statut,
-                  'jour': jour,
+             if (isToday) {
+               displayedTasks.add({
+                 'id': item['id'] ?? doc.id,
+                 'tache': item['tache'] ?? item['activite'] ?? 'Tâche inconnue',
+                 'entreprise': item['entreprise'] ?? 'Entreprise non précisée',
+                 'statut': statut.isEmpty ? 'en_attente' : statut,
+                 'jour': jour,
                 });
               }
             }

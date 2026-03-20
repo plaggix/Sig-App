@@ -64,6 +64,8 @@ dependencies:
   fl_chart: ^0.66.0
   cloudinary_sdk: ^5.0.0+1
   flutter_sound: ^9.29.13
+  url_launcher: ^6.3.2
+  cached_network_image: ^3.4.1
 
 icons_launcher:
     image_path: "assets/icone.png"
@@ -102,7 +104,7 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   assets:
-    - assets/acceuil.jpg
+    - assets/acceuil1.png
     - assets/welcome1.png
 
   # To add assets to your application, add an assets section, like this:

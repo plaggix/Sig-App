@@ -205,7 +205,7 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
       body: Container(
         decoration: const BoxDecoration(
           image: DecorationImage(
-            image: AssetImage('assets/acceuil.jpg'),
+            image: AssetImage('assets/acceuil1.png'),
             fit: BoxFit.cover,
             alignment: Alignment.center,
           ),

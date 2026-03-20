@@ -23,6 +23,7 @@ class _AccueilPageState extends State<AccueilPage> with TickerProviderStateMixin
   bool _loading = true;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  Map<String, int> _repartitionSousAgences = {};
 
   // Design System
   static const Color primaryColor = Color(0xFF2E7D32);
@@ -286,76 +287,86 @@ class _AccueilPageState extends State<AccueilPage> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildPieChart(Map<String, int> data) {
-    final entries = data.entries.toList();
-    final total = entries.fold<int>(0, (s, e) => s + e.value);
+Widget _buildPieChart(Map<String, int> data) {
+  final entries = data.entries.toList();
+  final total = entries.fold<int>(0, (s, e) => s + e.value);
 
-    return Row(
-      children: [
-        Expanded(
-          flex: 2,
-          child: PieChart(
-            PieChartData(
-              sections: entries.asMap().entries.map((entry) {
-                final idx = entry.key;
-                final e = entry.value;
-                final pct = total > 0 ? (e.value / total * 100) : 0;
-                return PieChartSectionData(
-                  value: e.value.toDouble(),
-                  title: '',
-                  color: chartColors[idx % chartColors.length],
-                  radius: 60,
-                  showTitle: false,
-                );
-              }).toList(),
-              sectionsSpace: 2,
-              centerSpaceRadius: 40,
-              pieTouchData: PieTouchData(
-                touchCallback: (FlTouchEvent event, pieTouchResponse) {},
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      final isSmall = constraints.maxWidth < 400;
+
+      return Column(
+        children: [
+          // PIE CHART
+          SizedBox(
+            height: isSmall ? 160 : 200,
+            child: PieChart(
+              PieChartData(
+                sections: entries.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final e = entry.value;
+
+                  return PieChartSectionData(
+                    value: e.value.toDouble(),
+                    title: '',
+                    color: chartColors[idx % chartColors.length],
+                    radius: isSmall ? 50 : 60,
+                    showTitle: false,
+                  );
+                }).toList(),
+                sectionsSpace: 3,
+                centerSpaceRadius: isSmall ? 30 : 40,
               ),
             ),
           ),
-        ),
-        Expanded(
-          flex: 3,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+
+          const SizedBox(height: 16),
+
+          // LÉGENDE RESPONSIVE
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
             children: entries.asMap().entries.map((entry) {
               final idx = entry.key;
               final e = entry.value;
               final pct = total > 0 ? (e.value / total * 100) : 0;
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4.0),
+
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: chartColors[idx % chartColors.length].withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 12,
-                      height: 12,
+                      width: 10,
+                      height: 10,
                       decoration: BoxDecoration(
                         color: chartColors[idx % chartColors.length],
                         shape: BoxShape.circle,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        e.key,
-                        style: const TextStyle(fontSize: 12, color: textSecondary),
-                      ),
-                    ),
+                    const SizedBox(width: 6),
                     Text(
-                      '${pct.toStringAsFixed(1)}%',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textPrimary),
+                      '${e.key} (${pct.toStringAsFixed(1)}%)',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: textPrimary,
+                      ),
                     ),
                   ],
                 ),
               );
             }).toList(),
           ),
-        ),
-      ],
-    );
-  }
+        ],
+      );
+    },
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -523,15 +534,13 @@ class _AccueilPageState extends State<AccueilPage> with TickerProviderStateMixin
                         ),
                       ),
                       const SizedBox(height: 12),
-                      SizedBox(
-                        height: 200,
-                        child: _buildPieChart({
+                    
+                        _buildPieChart({
                           'Sud': 12,
                           'Nord': 8,
                           'Est': 5,
                           'Ouest': 3,
                         }),
-                      ),
                     ],
                   ),
                 ),

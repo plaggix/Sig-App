@@ -186,7 +186,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       body: Container(
         decoration: const BoxDecoration(
           image: DecorationImage(
-            image: AssetImage('assets/acceuil.jpg'),
+            image: AssetImage('assets/acceuil1.png'),
             fit: BoxFit.cover,
             alignment: Alignment.center,
           ),
@@ -465,27 +465,37 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildRememberMeForgotPassword() {
-    return Row(
+Widget _buildRememberMeForgotPassword() {
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      runSpacing: 8, 
       children: [
-        // Remember me
-        Expanded(
+        // Groupe Checkbox + Texte
+        InkWell(
+          onTap: () => setState(() => _rememberMe = !_rememberMe),
+          borderRadius: BorderRadius.circular(8),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Checkbox(
-                value: _rememberMe,
-                onChanged: (value) {
-                  setState(() {
-                    _rememberMe = value ?? false;
-                  });
-                },
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
+              SizedBox(
+                height: 24,
+                width: 24,
+                child: Checkbox(
+                  value: _rememberMe,
+                  onChanged: (value) {
+                    setState(() => _rememberMe = value ?? false);
+                  },
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 'Se souvenir de moi',
                 style: TextStyle(
+                  fontSize: 14,
                   color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                 ),
               ),
@@ -495,11 +505,17 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
         // Mot de passe oublié
         TextButton(
           onPressed: _showForgotPasswordSheet,
-          child: Text(
+          style: TextButton.styleFrom(
+            padding: EdgeInsets.zero,
+            minimumSize: Size(50, 30),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: const Text(
             'Mot de passe oublié ?',
             style: TextStyle(
+              fontSize: 14,
               color: Color(0xFF2E7D32),
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),

@@ -20,6 +20,7 @@ import 'profile_page.dart';
 import 'register_page.dart';
 import 'forgot_password_page.dart';
 import 'admin_page.dart';
+import 'message_page.dart';
 
 // Notification setup
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
@@ -108,12 +109,6 @@ class _MyAppState extends State<MyApp> {
           ),
         );
       }
-    });
-
-    //  Notification tapée (appli en arrière-plan)
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      print('Notification tapée: ${message.notification?.title}');
-      Navigator.pushNamed(context, '/notifications');
     });
   }
 
